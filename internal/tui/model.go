@@ -52,6 +52,8 @@ type Model struct {
 
 	// Left pane tab: 0=channels, 1=profile/settings
 	leftTab int
+	// Palette Index for theme selection
+	paletteIndex int
 
 	msgSub   chan db.Message
 	isSubbed bool
@@ -136,6 +138,14 @@ func NewModel(database *db.DB, broker *pubsub.Broker, user *db.User, s ssh.Sessi
 		input:      mainIn,
 		viewport:   vp,
 		renderer:   r,
+	}
+
+	palette := []string{"#E74C3C", "#33FF57", "#3357FF", "#FFD700", "#9B59B6", "#E67E22", "#1ABC9C", "#FF5733", "#00BFFF", "#FF69B4", "#ADFF2F", "#F1C40F"}
+	for i, c := range palette {
+		if c == user.Color {
+			m.paletteIndex = i
+			break
+		}
 	}
 
 	if user.IsVerified {
@@ -264,6 +274,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyEnter:
 			if m.appState == bannedState {
 				return m, tea.Quit
+			}
+
+			if m.leftTab == 1 {
+				// Profile tab: Apply selected color
+				palette := []string{"#E74C3C", "#33FF57", "#3357FF", "#FFD700", "#9B59B6", "#E67E22", "#1ABC9C", "#FF5733", "#00BFFF", "#FF69B4", "#ADFF2F", "#F1C40F"}
+				selectedColor := palette[m.paletteIndex]
+				m.database.UpdateUserColor(m.user.ID, selectedColor)
+				m.user.Color = selectedColor
+				m.appendSystemMsg("Applied theme: " + selectedColor)
+				return m, nil
 			}
 
 			if m.appState == questState {
@@ -476,16 +496,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case tea.KeyTab:
-			if m.appState == mainState && len(m.channels) > 0 {
-				if m.isSubbed && m.msgSub != nil {
-					m.broker.Unsubscribe(m.channels[m.activeChan].ID, m.msgSub)
-					m.isSubbed = false
+			if m.appState == mainState {
+				if m.leftTab == 0 && len(m.channels) > 0 {
+					if m.isSubbed && m.msgSub != nil {
+						m.broker.Unsubscribe(m.channels[m.activeChan].ID, m.msgSub)
+						m.isSubbed = false
+					}
+					m.activeChan = (m.activeChan + 1) % len(m.channels)
+					m.loadChannelMessages()
+					m.msgSub = m.broker.Subscribe(m.channels[m.activeChan].ID, m.user)
+					m.isSubbed = true
+					return m, m.waitForMessages()
+				} else if m.leftTab == 1 {
+					m.paletteIndex = (m.paletteIndex + 1) % 12
+					return m, nil
 				}
-				m.activeChan = (m.activeChan + 1) % len(m.channels)
-				m.loadChannelMessages()
-				m.msgSub = m.broker.Subscribe(m.channels[m.activeChan].ID, m.user)
-				m.isSubbed = true
-				return m, m.waitForMessages()
 			}
 
 		case tea.KeyCtrlY: // Specific Key To Trigger OSC 52 Copy for Last Message
@@ -616,34 +641,54 @@ func (m *Model) View() string {
 		}
 	} else {
 		// Profile/Settings tab
-		roleBadge := "user"
+		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render("  ── IDENTIFICATION") + "\n\n"
+		
+		colorDot := lipgloss.NewStyle().Foreground(lipgloss.Color(m.user.Color)).Render("●")
+		leftPaneContent += "  " + colorDot + " " + lipgloss.NewStyle().Bold(true).Render(m.user.Username) + "\n"
+		
+		roleIcon := ""
+		roleName := m.user.Role
 		switch m.user.Role {
 		case "owner":
-			roleBadge = lipgloss.NewStyle().Foreground(lipgloss.Color("208")).Render("👑 owner")
+			roleIcon = lipgloss.NewStyle().Foreground(lipgloss.Color("208")).Render("👑 ")
+			roleName = lipgloss.NewStyle().Foreground(lipgloss.Color("208")).Render("Owner")
 		case "admin":
-			roleBadge = lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Render("★ admin")
+			roleIcon = lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Render("★ ")
+			roleName = lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Render("Admin")
+		default:
+			roleIcon = "👤 "
+			roleName = "User"
 		}
-		colorDot := lipgloss.NewStyle().Foreground(lipgloss.Color(m.user.Color)).Render("⬤")
-		leftPaneContent += "  " + colorDot + " " + lipgloss.NewStyle().Bold(true).Render(m.user.Username) + "\n"
-		leftPaneContent += "  " + roleBadge + "\n\n"
-		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("  ─── Appearance ───") + "\n"
-		palette := []string{"#FF5733", "#33FF57", "#3357FF", "#F1C40F", "#9B59B6", "#E67E22", "#1ABC9C", "#E74C3C", "#00BFFF", "#FF69B4", "#ADFF2F", "#FFD700"}
-		paletteNames := []string{"red", "green", "blue", "yellow", "purple", "orange", "teal", "crimson", "cyan", "pink", "lime", "gold"}
-		var row string
-		for i, c := range palette {
-			swatch := lipgloss.NewStyle().Foreground(lipgloss.Color(c)).Render("⬤")
-			if c == m.user.Color {
-				swatch = lipgloss.NewStyle().Foreground(lipgloss.Color(c)).Bold(true).Render("◉")
-			}
-			row += swatch + " "
-			if (i+1)%4 == 0 {
-				leftPaneContent += "  " + row + "\n"
-				row = ""
-			}
-			_ = paletteNames[i]
+		leftPaneContent += "  " + roleIcon + roleName + "\n\n"
+		
+		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render("  ── APPEARANCE") + "\n\n"
+		themes := []struct {
+			Name  string
+			Color string
+		}{
+			{"Ruby", "#E74C3C"}, {"Emerald", "#33FF57"}, {"Sapphire", "#3357FF"}, {"Gold", "#FFD700"},
+			{"Amethyst", "#9B59B6"}, {"Orange", "#E67E22"}, {"Teal", "#1ABC9C"}, {"Sunset", "#FF5733"},
+			{"Sky", "#00BFFF"}, {"Pink", "#FF69B4"}, {"Lime", "#ADFF2F"}, {"Yellow", "#F1C40F"},
 		}
+
+		for i, t := range themes {
+			prefix := "  "
+			dot := "○ "
+			if t.Color == m.user.Color {
+				dot = "● " // Active
+			}
+			
+			style := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Color))
+			if i == m.paletteIndex {
+				prefix = "▸ "
+				style = style.Bold(true).Underline(true)
+			}
+			
+			leftPaneContent += " " + prefix + style.Render(dot+t.Name) + "\n"
+		}
+		
 		leftPaneContent += "\n"
-		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("  /color <name>") + "\n"
+		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("  Tab: Cycle • Enter: Pick") + "\n"
 		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("  /nick <name>") + "\n"
 	}
 	leftPane := leftPaneStyle.Width(leftW).Height(midH).Render(leftPaneContent)
