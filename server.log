@@ -1,0 +1,37 @@
+2026/03/23 23:22:49 Starting SSH server on port :2222
+2026/03/23 23:27:55 INFO inko connect [::1]:48524 true [] xterm-256color 100 30 SSH-2.0-OpenSSH_10.2
+Caught panic:
+
+send on closed channel
+
+Restoring terminal...
+
+goroutine 36 [running]:
+runtime/debug.Stack()
+	/usr/lib/go/src/runtime/debug/stack.go:26 +0x5e
+runtime/debug.PrintStack()
+	/usr/lib/go/src/runtime/debug/stack.go:18 +0x13
+github.com/charmbracelet/bubbletea.(*Program).recoverFromPanic(0x204b7fa8a000, {0x820980, 0x89fad0})
+	/home/inko/go/pkg/mod/github.com/charmbracelet/bubbletea@v1.3.10/tea.go:847 +0xac
+github.com/charmbracelet/bubbletea.(*Program).Run.func2()
+	/home/inko/go/pkg/mod/github.com/charmbracelet/bubbletea@v1.3.10/tea.go:638 +0x10c
+panic({0x820980?, 0x89fad0?})
+	/usr/lib/go/src/runtime/panic.go:860 +0x13a
+clinet/internal/pubsub.(*Broker).Broadcast(0x204b7f820188?, {0x204b7f9261b0?, 0x24?}, {{0x204b7f926240, 0x24}, {0x204b7f9261b0, 0x24}, {0x204b7f926090, 0x24}, {0x204b7fc0f558, ...}, ...})
+	/home/inko/Documents/GitHubProj/pipe.net/internal/pubsub/broker.go:50 +0x171
+clinet/internal/tui.(*Model).Update(0x204b7f97a008, {0x85b620, 0x204b7f8d6a20})
+	/home/inko/Documents/GitHubProj/pipe.net/internal/tui/model.go:168 +0x7d2
+github.com/charmbracelet/bubbletea.(*Program).eventLoop(0x204b7fa8a000, {0x8a4000?, 0x204b7f97a008?}, 0x204b7f934150)
+	/home/inko/go/pkg/mod/github.com/charmbracelet/bubbletea@v1.3.10/tea.go:494 +0x7ce
+github.com/charmbracelet/bubbletea.(*Program).Run(0x204b7fa8a000)
+	/home/inko/go/pkg/mod/github.com/charmbracelet/bubbletea@v1.3.10/tea.go:716 +0xae7
+clinet/internal/ssh.Start.Middleware.MiddlewareWithProgramHandler.func10.1({0x8ab8c0, 0x204b7fa22270})
+	/home/inko/go/pkg/mod/github.com/charmbracelet/wish@v1.4.7/bubbletea/tea.go:95 +0x1ef
+github.com/charmbracelet/wish/logging.Middleware.MiddlewareWithLogger.func1.1({0x8ab8c0, 0x204b7fa22270})
+	/home/inko/go/pkg/mod/github.com/charmbracelet/wish@v1.4.7/logging/logging.go:47 +0x445
+github.com/charmbracelet/ssh.(*session).handleRequests.func1()
+	/home/inko/go/pkg/mod/github.com/charmbracelet/ssh@v0.0.0-20250128164007-98fd5ae11894/session.go:278 +0x12c
+created by github.com/charmbracelet/ssh.(*session).handleRequests in goroutine 22
+	/home/inko/go/pkg/mod/github.com/charmbracelet/ssh@v0.0.0-20250128164007-98fd5ae11894/session.go:272 +0x4fb
+2026/03/23 23:28:12 ERRO app exit with error error="program was killed: program experienced a panic"
+2026/03/23 23:28:12 INFO [::1]:48524 disconnect 17.225543619s

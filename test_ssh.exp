@@ -1,0 +1,13 @@
+#!/usr/bin/expect -f
+set timeout 5
+spawn ssh -p 2222 -o StrictHostKeyChecking=no localhost
+
+expect "Decode this base64 string" {
+    send "let me in\r"
+}
+
+expect "> #general" {
+    send "hello world\r"
+}
+
+expect eof
