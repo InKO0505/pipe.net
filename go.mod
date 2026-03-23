@@ -10,7 +10,7 @@ require (
 	github.com/charmbracelet/wish v1.4.7
 	github.com/google/uuid v1.6.0
 	github.com/mattn/go-sqlite3 v1.14.37
-	golang.org/x/crypto v0.36.0
+	golang.org/x/crypto v0.45.0
 )
 
 require (
@@ -45,5 +45,5 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
 	golang.org/x/sys v0.38.0 // indirect
-	golang.org/x/text v0.23.0 // indirect
+	golang.org/x/text v0.31.0 // indirect
 )
