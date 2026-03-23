@@ -1,0 +1,9 @@
+# Binaries
+clinet
+
+# Database
+clinet.db
+*.db
+
+# SSH Keys and Secrets
+.ssh/
