@@ -29,6 +29,15 @@ const (
 	bannedState
 )
 
+var appPalette = []struct {
+	Name  string
+	Color string
+}{
+	{"Ruby", "#E74C3C"}, {"Emerald", "#33FF57"}, {"Sapphire", "#3357FF"}, {"Gold", "#FFD700"},
+	{"Amethyst", "#9B59B6"}, {"Orange", "#E67E22"}, {"Teal", "#1ABC9C"}, {"Sunset", "#FF5733"},
+	{"Sky", "#00BFFF"}, {"Pink", "#FF69B4"}, {"Lime", "#ADFF2F"}, {"Yellow", "#F1C40F"},
+}
+
 type Model struct {
 	database *db.DB
 	broker   *pubsub.Broker
@@ -140,9 +149,8 @@ func NewModel(database *db.DB, broker *pubsub.Broker, user *db.User, s ssh.Sessi
 		renderer:   r,
 	}
 
-	palette := []string{"#E74C3C", "#33FF57", "#3357FF", "#FFD700", "#9B59B6", "#E67E22", "#1ABC9C", "#FF5733", "#00BFFF", "#FF69B4", "#ADFF2F", "#F1C40F"}
-	for i, c := range palette {
-		if c == user.Color {
+	for i, t := range appPalette {
+		if t.Color == user.Color {
 			m.paletteIndex = i
 			break
 		}
@@ -272,6 +280,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyCtrlP, tea.KeyShiftTab:
 			if m.appState == mainState {
 				m.leftTab = (m.leftTab + 1) % 2
+				if m.leftTab == 1 {
+					m.input.Blur()
+				} else {
+					m.input.Focus()
+				}
 				return m, nil
 			}
 
@@ -282,11 +295,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if m.leftTab == 1 {
 				// Profile tab: Apply selected color
-				palette := []string{"#E74C3C", "#33FF57", "#3357FF", "#FFD700", "#9B59B6", "#E67E22", "#1ABC9C", "#FF5733", "#00BFFF", "#FF69B4", "#ADFF2F", "#F1C40F"}
-				selectedColor := palette[m.paletteIndex]
+				selectedColor := appPalette[m.paletteIndex].Color
 				m.database.UpdateUserColor(m.user.ID, selectedColor)
 				m.user.Color = selectedColor
-				m.appendSystemMsg("Applied theme: " + selectedColor)
+				m.appendSystemMsg("Successfully applied theme: " + appPalette[m.paletteIndex].Name + " (" + selectedColor + ")")
+				m.updateViewportContent()
 				return m, nil
 			}
 
@@ -477,6 +490,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						handled = true
 					case "/p", "/settings", "/profile":
 						m.leftTab = (m.leftTab + 1) % 2
+						if m.leftTab == 1 {
+							m.input.Blur()
+						} else {
+							m.input.Focus()
+						}
 						handled = true
 					default:
 						if base64.StdEncoding.EncodeToString([]byte(content)) == "L2RpbGtvZnJ1eg==" {
@@ -617,7 +635,7 @@ func (m *Model) View() string {
 	}
 	header := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("205")).
+		Foreground(lipgloss.Color(m.user.Color)). // DYNAMIC HEADER COLOR
 		Align(lipgloss.Center).
 		Width(m.width).
 		MarginBottom(1).
@@ -666,36 +684,37 @@ func (m *Model) View() string {
 		leftPaneContent += "  " + roleIcon + roleName + "\n\n"
 		
 		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render("  ── APPEARANCE") + "\n\n"
-		themes := []struct {
-			Name  string
-			Color string
-		}{
-			{"Ruby", "#E74C3C"}, {"Emerald", "#33FF57"}, {"Sapphire", "#3357FF"}, {"Gold", "#FFD700"},
-			{"Amethyst", "#9B59B6"}, {"Orange", "#E67E22"}, {"Teal", "#1ABC9C"}, {"Sunset", "#FF5733"},
-			{"Sky", "#00BFFF"}, {"Pink", "#FF69B4"}, {"Lime", "#ADFF2F"}, {"Yellow", "#F1C40F"},
-		}
 
-		for i, t := range themes {
-			prefix := "  "
+		for i, t := range appPalette {
+			pointer := "  "
 			dot := "○ "
-			if t.Color == m.user.Color {
-				dot = "● " // Active
-			}
-			
 			style := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Color))
-			if i == m.paletteIndex {
-				prefix = "▸ "
-				style = style.Bold(true).Underline(true)
+			
+			if t.Color == m.user.Color {
+				dot = "● " // Currently active
 			}
 			
-			leftPaneContent += " " + prefix + style.Render(dot+t.Name) + "\n"
+			if i == m.paletteIndex {
+				pointer = "▸ "
+				// USE VIBRANT FOCUS STYLE
+				style = style.Bold(true).Background(lipgloss.Color("238")).PaddingRight(1)
+				if t.Color == m.user.Color {
+					style = style.Underline(true)
+				}
+			}
+			
+			leftPaneContent += " " + pointer + style.Render(dot+t.Name) + "\n"
 		}
 		
 		leftPaneContent += "\n"
-		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("  Tab: Cycle • Enter: Pick") + "\n"
+		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color(m.user.Color)).Bold(true).Render("  [ ENTER ] to select") + "\n"
+		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("  Tab: move focus") + "\n"
 		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("  /nick <name>") + "\n"
 	}
-	leftPane := leftPaneStyle.Width(leftW).Height(midH).Render(leftPaneContent)
+	
+	// DYNAMIC BORDER COLOR
+	dynamicBorder := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color(m.user.Color))
+	leftPane := dynamicBorder.Width(leftW).Height(midH).Render(leftPaneContent)
 
 	// Right Panel (Online)
 	online := m.broker.GetOnlineUsers(m.channels[m.activeChan].ID)
