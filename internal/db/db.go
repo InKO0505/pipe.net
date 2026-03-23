@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,11 +21,15 @@ type User struct {
 	Username   string
 	IsVerified bool
 	CreatedAt  time.Time
+	Role       string
+	Color      string
+	IsBanned   bool
 }
 
 type Channel struct {
 	ID        string
 	Name      string
+	Topic     string
 	CreatedAt time.Time
 }
 
@@ -35,6 +40,8 @@ type Message struct {
 	Content   string
 	CreatedAt time.Time
 	Username  string // Used for Joins
+	UserColor string // Used for Joins
+	UserRole  string // Used for Joins
 }
 
 func InitDB(filepath string) (*DB, error) {
@@ -69,6 +76,12 @@ func InitDB(filepath string) (*DB, error) {
 		return nil, err
 	}
 
+	// Migrations for existing DBs
+	db.Exec(`ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'`)
+	db.Exec(`ALTER TABLE users ADD COLUMN color TEXT DEFAULT ''`)
+	db.Exec(`ALTER TABLE users ADD COLUMN is_banned BOOLEAN DEFAULT 0`)
+	db.Exec(`ALTER TABLE channels ADD COLUMN topic TEXT DEFAULT ''`)
+
 	// Pre-seed default channels
 	channels := []string{"#general", "#linux", "#bash-magic"}
 	for _, ch := range channels {
@@ -83,9 +96,19 @@ func InitDB(filepath string) (*DB, error) {
 }
 
 func (db *DB) GetUserByPubKey(pubKey string) (*User, error) {
-	row := db.QueryRow("SELECT id, ssh_pub_key, username, is_verified, created_at FROM users WHERE ssh_pub_key = ?", pubKey)
+	row := db.QueryRow("SELECT id, ssh_pub_key, username, is_verified, created_at, role, color, is_banned FROM users WHERE ssh_pub_key = ?", pubKey)
 	var u User
-	err := row.Scan(&u.ID, &u.SSHPubKey, &u.Username, &u.IsVerified, &u.CreatedAt)
+	err := row.Scan(&u.ID, &u.SSHPubKey, &u.Username, &u.IsVerified, &u.CreatedAt, &u.Role, &u.Color, &u.IsBanned)
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
+func (db *DB) GetUserByUsername(username string) (*User, error) {
+	row := db.QueryRow("SELECT id, ssh_pub_key, username, is_verified, created_at, role, color, is_banned FROM users WHERE username = ?", username)
+	var u User
+	err := row.Scan(&u.ID, &u.SSHPubKey, &u.Username, &u.IsVerified, &u.CreatedAt, &u.Role, &u.Color, &u.IsBanned)
 	if err != nil {
 		return nil, err
 	}
@@ -93,15 +116,28 @@ func (db *DB) GetUserByPubKey(pubKey string) (*User, error) {
 }
 
 func (db *DB) CreateUser(pubKey string) *User {
+	colors := []string{"#FF5733", "#33FF57", "#3357FF", "#F1C40F", "#9B59B6", "#E67E22", "#1ABC9C", "#E74C3C"}
+	color := colors[time.Now().UnixNano()%int64(len(colors))]
+
+	var count int
+	db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
+	role := "user"
+	if count == 0 {
+		role = "owner"
+	}
+
 	u := &User{
 		ID:         uuid.New().String(),
 		SSHPubKey:  pubKey,
 		Username:   fmt.Sprintf("anon_%s", uuid.New().String()[:4]),
 		IsVerified: false,
 		CreatedAt:  time.Now(),
+		Role:       role,
+		Color:      color,
+		IsBanned:   false,
 	}
-	_, err := db.Exec("INSERT INTO users (id, ssh_pub_key, username, is_verified, created_at) VALUES (?, ?, ?, ?, ?)",
-		u.ID, u.SSHPubKey, u.Username, u.IsVerified, u.CreatedAt)
+	_, err := db.Exec("INSERT INTO users (id, ssh_pub_key, username, is_verified, created_at, role, color, is_banned) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		u.ID, u.SSHPubKey, u.Username, u.IsVerified, u.CreatedAt, u.Role, u.Color, u.IsBanned)
 	if err != nil {
 		log.Printf("Error creating user: %v\n", err)
 	}
@@ -115,9 +151,41 @@ func (db *DB) SetVerified(userID string) {
 	}
 }
 
+func (db *DB) UpdateUsername(userID, newName string) {
+	_, err := db.Exec("UPDATE users SET username = ? WHERE id = ?", newName, userID)
+	if err != nil {
+		log.Printf("Error updating username: %v\n", err)
+	}
+}
+
+func (db *DB) UpdateUserColor(userID, color string) {
+	_, err := db.Exec("UPDATE users SET color = ? WHERE id = ?", color, userID)
+	if err != nil {
+		log.Printf("Error updating color: %v\n", err)
+	}
+}
+
+func (db *DB) SetUserRole(userID, role string) {
+	_, err := db.Exec("UPDATE users SET role = ? WHERE id = ?", role, userID)
+	if err != nil {
+		log.Printf("Error updating role: %v\n", err)
+	}
+}
+
+func (db *DB) SetBanned(userID string, banned bool) {
+	val := 0
+	if banned {
+		val = 1
+	}
+	_, err := db.Exec("UPDATE users SET is_banned = ? WHERE id = ?", val, userID)
+	if err != nil {
+		log.Printf("Error updating ban status: %v\n", err)
+	}
+}
+
 func (db *DB) GetChannels() []Channel {
 	rows, err := db.Query(`
-		SELECT id, name, created_at
+		SELECT id, name, topic, created_at
 		FROM channels
 		ORDER BY CASE name
 			WHEN '#general' THEN 0
@@ -135,7 +203,7 @@ func (db *DB) GetChannels() []Channel {
 	var chs []Channel
 	for rows.Next() {
 		var c Channel
-		if err := rows.Scan(&c.ID, &c.Name, &c.CreatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.Topic, &c.CreatedAt); err != nil {
 			log.Printf("Error scanning channel: %v\n", err)
 			return nil
 		}
@@ -144,9 +212,32 @@ func (db *DB) GetChannels() []Channel {
 	return chs
 }
 
+func (db *DB) CreateChannel(name string) (*Channel, error) {
+	name = "#" + strings.TrimPrefix(name, "#")
+	ch := &Channel{
+		ID:        uuid.New().String(),
+		Name:      name,
+		Topic:     "",
+		CreatedAt: time.Now(),
+	}
+	_, err := db.Exec("INSERT OR IGNORE INTO channels (id, name, topic, created_at) VALUES (?, ?, ?, ?)",
+		ch.ID, ch.Name, ch.Topic, ch.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return ch, nil
+}
+
+func (db *DB) SetChannelTopic(channelID, topic string) {
+	_, err := db.Exec("UPDATE channels SET topic = ? WHERE id = ?", topic, channelID)
+	if err != nil {
+		log.Printf("Error setting topic: %v\n", err)
+	}
+}
+
 func (db *DB) GetMessages(channelID string) []Message {
 	rows, err := db.Query(`
-        SELECT m.id, m.channel_id, m.user_id, m.content, m.created_at, u.username
+        SELECT m.id, m.channel_id, m.user_id, m.content, m.created_at, u.username, u.color, u.role
         FROM messages m
         JOIN users u ON m.user_id = u.id
         WHERE m.channel_id = ?
@@ -161,7 +252,7 @@ func (db *DB) GetMessages(channelID string) []Message {
 	var msgs []Message
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Content, &m.CreatedAt, &m.Username); err != nil {
+		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Content, &m.CreatedAt, &m.Username, &m.UserColor, &m.UserRole); err != nil {
 			log.Printf("Error scanning message: %v\n", err)
 			return nil
 		}
@@ -184,7 +275,7 @@ func (db *DB) CreateMessage(channelID, userID, content string) Message {
 		log.Printf("Error creating message: %v\n", err)
 	}
 
-	row := db.QueryRow("SELECT username FROM users WHERE id = ?", userID)
-	_ = row.Scan(&m.Username)
+	row := db.QueryRow("SELECT username, color, role FROM users WHERE id = ?", userID)
+	_ = row.Scan(&m.Username, &m.UserColor, &m.UserRole)
 	return m
 }

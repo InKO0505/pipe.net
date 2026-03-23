@@ -4,6 +4,12 @@ clinet
 # Database
 clinet.db
 *.db
+*.db-shm
+*.db-wal
 
 # SSH Keys and Secrets
 .ssh/
+
+# Logs and test files
+server.log
+test_ssh.exp

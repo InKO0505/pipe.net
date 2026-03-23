@@ -11,7 +11,8 @@ func TestUnsubscribeClosesSubscriptionChannel(t *testing.T) {
 	t.Parallel()
 
 	broker := NewBroker()
-	sub := broker.Subscribe("general")
+	dummyUser := &db.User{ID: "test_user_id"}
+	sub := broker.Subscribe("general", dummyUser)
 	broker.Unsubscribe("general", sub)
 
 	select {
@@ -28,8 +29,10 @@ func TestBroadcastOnlyReachesActiveSubscribers(t *testing.T) {
 	t.Parallel()
 
 	broker := NewBroker()
-	active := broker.Subscribe("general")
-	inactive := broker.Subscribe("general")
+	dummyUser1 := &db.User{ID: "test_user_1"}
+	dummyUser2 := &db.User{ID: "test_user_2"}
+	active := broker.Subscribe("general", dummyUser1)
+	inactive := broker.Subscribe("general", dummyUser2)
 	broker.Unsubscribe("general", inactive)
 
 	want := db.Message{Content: "hello"}
