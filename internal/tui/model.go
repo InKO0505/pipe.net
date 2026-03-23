@@ -207,8 +207,12 @@ func (m *Model) updateViewportContent() {
 		}
 
 		userStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("63")).Bold(true)
-		if msg.UserColor != "" {
-			userStyle = userStyle.Foreground(lipgloss.Color(msg.UserColor))
+		color := msg.UserColor
+		if msg.UserID == m.user.ID {
+			color = m.user.Color
+		}
+		if color != "" {
+			userStyle = userStyle.Foreground(lipgloss.Color(color))
 		}
 
 		roleBadge := ""
