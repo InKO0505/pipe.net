@@ -1,4 +1,3 @@
-// internal/db/db.go
 package db
 
 import (
@@ -75,6 +74,9 @@ func InitDB(filepath string) (*DB, error) {
 	for _, ch := range channels {
 		_, err = db.Exec(`INSERT OR IGNORE INTO channels (id, name, created_at) VALUES (?, ?, ?)`,
 			uuid.New().String(), ch, time.Now())
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &DB{db}, nil
@@ -114,7 +116,16 @@ func (db *DB) SetVerified(userID string) {
 }
 
 func (db *DB) GetChannels() []Channel {
-	rows, err := db.Query("SELECT id, name, created_at FROM channels ORDER BY name")
+	rows, err := db.Query(`
+		SELECT id, name, created_at
+		FROM channels
+		ORDER BY CASE name
+			WHEN '#general' THEN 0
+			WHEN '#linux' THEN 1
+			WHEN '#bash-magic' THEN 2
+			ELSE 3
+		END, name
+	`)
 	if err != nil {
 		log.Printf("Error fetching channels: %v\n", err)
 		return nil
@@ -124,7 +135,10 @@ func (db *DB) GetChannels() []Channel {
 	var chs []Channel
 	for rows.Next() {
 		var c Channel
-		rows.Scan(&c.ID, &c.Name, &c.CreatedAt)
+		if err := rows.Scan(&c.ID, &c.Name, &c.CreatedAt); err != nil {
+			log.Printf("Error scanning channel: %v\n", err)
+			return nil
+		}
 		chs = append(chs, c)
 	}
 	return chs
@@ -147,7 +161,10 @@ func (db *DB) GetMessages(channelID string) []Message {
 	var msgs []Message
 	for rows.Next() {
 		var m Message
-		rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Content, &m.CreatedAt, &m.Username)
+		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Content, &m.CreatedAt, &m.Username); err != nil {
+			log.Printf("Error scanning message: %v\n", err)
+			return nil
+		}
 		msgs = append(msgs, m)
 	}
 	return msgs
@@ -168,6 +185,6 @@ func (db *DB) CreateMessage(channelID, userID, content string) Message {
 	}
 
 	row := db.QueryRow("SELECT username FROM users WHERE id = ?", userID)
-	row.Scan(&m.Username)
+	_ = row.Scan(&m.Username)
 	return m
 }
