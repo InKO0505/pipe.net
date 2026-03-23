@@ -332,6 +332,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					isOwner := role == "owner"
 
 					switch cmd {
+					case "/theme":
+						if arg != "" {
+							for _, t := range appPalette {
+								if strings.EqualFold(t.Name, arg) {
+									m.database.UpdateUserColor(m.user.ID, t.Color)
+									m.user.Color = t.Color
+									m.appendSystemMsg("Applied theme: " + t.Name)
+									m.updateViewportContent()
+									return m, nil
+								}
+							}
+							m.appendSystemMsg("Theme not found. Available: Ruby, Emerald, Sapphire, Gold, Amethyst, Orange, Teal, Sunset, Sky, Pink, Lime, Yellow")
+						}
 					case "/nick":
 						if arg != "" {
 							m.database.UpdateUsername(m.user.ID, arg)
@@ -530,9 +543,29 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.isSubbed = true
 					return m, m.waitForMessages()
 				} else if m.leftTab == 1 {
-					m.paletteIndex = (m.paletteIndex + 1) % 12
+					m.paletteIndex = (m.paletteIndex + 1) % len(appPalette)
 					return m, nil
 				}
+			}
+
+		case tea.KeyUp:
+			if m.leftTab == 1 {
+				m.paletteIndex = (m.paletteIndex - 1 + len(appPalette)) % len(appPalette)
+				return m, nil
+			}
+		case tea.KeyDown:
+			if m.leftTab == 1 {
+				m.paletteIndex = (m.paletteIndex + 1) % len(appPalette)
+				return m, nil
+			}
+		case tea.KeySpace:
+			if m.leftTab == 1 {
+				selectedColor := appPalette[m.paletteIndex].Color
+				m.database.UpdateUserColor(m.user.ID, selectedColor)
+				m.user.Color = selectedColor
+				m.appendSystemMsg("Theme selected via Space: " + appPalette[m.paletteIndex].Name)
+				m.updateViewportContent()
+				return m, nil
 			}
 
 		case tea.KeyCtrlY: // Specific Key To Trigger OSC 52 Copy for Last Message
@@ -696,10 +729,10 @@ func (m *Model) View() string {
 			
 			if i == m.paletteIndex {
 				pointer = "▸ "
-				// USE VIBRANT FOCUS STYLE
-				style = style.Bold(true).Background(lipgloss.Color("238")).PaddingRight(1)
+				// ULTRA HIGH CONTRAST FOCUS
+				style = style.Bold(true).Background(lipgloss.Color("15")).Foreground(lipgloss.Color("0")).PaddingRight(1)
 				if t.Color == m.user.Color {
-					style = style.Underline(true)
+					style = style.Underline(true).Italic(true)
 				}
 			}
 			
@@ -707,12 +740,12 @@ func (m *Model) View() string {
 		}
 		
 		leftPaneContent += "\n"
-		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color(m.user.Color)).Bold(true).Render("  [ ENTER ] to select") + "\n"
-		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("  Tab: move focus") + "\n"
-		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("  /nick <name>") + "\n"
+		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color(m.user.Color)).Bold(true).Render("  [ ENTER/SPACE ] to set") + "\n"
+		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("  Arrows/Tab: navigate") + "\n"
+		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("  /theme <name>") + "\n"
 	}
 	
-	// DYNAMIC BORDER COLOR
+	// SUPREME DYNAMIC UI
 	dynamicBorder := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color(m.user.Color))
 	leftPane := dynamicBorder.Width(leftW).Height(midH).Render(leftPaneContent)
 
