@@ -1,8 +1,8 @@
-// internal/pubsub/broker.go
 package pubsub
 
 import (
 	"sync"
+
 	"clinet/internal/db"
 )
 
@@ -35,7 +35,13 @@ func (b *Broker) Unsubscribe(channelID string, ch chan db.Message) {
 	defer b.mu.Unlock()
 
 	if subs, ok := b.subscribers[channelID]; ok {
-		delete(subs, ch)
+		if _, exists := subs[ch]; exists {
+			delete(subs, ch)
+			close(ch)
+		}
+		if len(subs) == 0 {
+			delete(b.subscribers, channelID)
+		}
 	}
 }
 
