@@ -255,7 +255,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Quit
 
-		case tea.KeyCtrlP:
+		case tea.KeyCtrlP, tea.KeyShiftTab:
 			if m.appState == mainState {
 				m.leftTab = (m.leftTab + 1) % 2
 				return m, nil
@@ -450,6 +450,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 								cmds = append(cmds, fetchImageCmd(arg))
 							}
 						}
+						handled = true
+					case "/p", "/settings", "/profile":
+						m.leftTab = (m.leftTab + 1) % 2
 						handled = true
 					default:
 						if base64.StdEncoding.EncodeToString([]byte(content)) == "L2RpbGtvZnJ1eg==" {
