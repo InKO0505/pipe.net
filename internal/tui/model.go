@@ -65,6 +65,24 @@ func (m *Model) currentTheme() struct {
 	return appPalette[m.paletteIndex]
 }
 
+func findThemeByColor(color string) (int, bool) {
+	for i, t := range appPalette {
+		if strings.EqualFold(t.Color, color) {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+func findThemeByName(name string) (int, bool) {
+	for i, t := range appPalette {
+		if strings.EqualFold(t.Name, name) {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
 type Model struct {
 	database *db.DB
 	broker   *pubsub.Broker
