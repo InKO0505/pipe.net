@@ -768,20 +768,20 @@ func (m *Model) View() string {
 
 	// Header Panel
 	ch := m.channels[m.activeChan]
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.user.Color))
-	topicStyle := lipgloss.NewStyle().Italic(true).Foreground(lipgloss.Color("245"))
+	headerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#ffffff")).
+		Background(lipgloss.Color(m.user.Color)).
+		Bold(true).
+		Width(m.width).
+		Align(lipgloss.Center)
 
-	headerTitle := titleStyle.Render(fmt.Sprintf("CLI-Net v1.0 | %s", ch.Name))
-	headerTopic := ""
+	topicStr := "No topic set"
 	if ch.Topic != "" {
-		headerTopic = " — " + topicStyle.Render(ch.Topic)
+		topicStr = ch.Topic
 	}
 
-	header := lipgloss.NewStyle().
-		Width(m.width).
-		Align(lipgloss.Center).
-		MarginBottom(1).
-		Render(headerTitle + headerTopic)
+	headerText := fmt.Sprintf(" %s  •  Topic: %s ", ch.Name, topicStr)
+	header := headerStyle.Render(headerText)
 
 	// Left Panel (Channels)
 	var leftPaneContent string
