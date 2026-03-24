@@ -83,13 +83,23 @@ func InitDB(filepath string) (*DB, error) {
 	db.Exec(`ALTER TABLE channels ADD COLUMN topic TEXT DEFAULT ''`)
 
 	// Pre-seed default channels
-	channels := []string{"#general", "#linux", "#bash-magic"}
+	type defaultChan struct {
+		name  string
+		topic string
+	}
+	channels := []defaultChan{
+		{"#general", "Welcome to the main channel! Be polite."},
+		{"#linux", "All about the penguin OS 🐧"},
+		{"#bash-magic", "Shell scripting, grep, awk and other wizardry 🪄"},
+	}
 	for _, ch := range channels {
-		_, err = db.Exec(`INSERT OR IGNORE INTO channels (id, name, created_at) VALUES (?, ?, ?)`,
-			uuid.New().String(), ch, time.Now())
+		_, err = db.Exec(`INSERT OR IGNORE INTO channels (id, name, topic, created_at) VALUES (?, ?, ?, ?)`,
+			uuid.New().String(), ch.name, ch.topic, time.Now())
 		if err != nil {
 			return nil, err
 		}
+		// Also update if they already exist
+		_, _ = db.Exec(`UPDATE channels SET topic = ? WHERE name = ? AND (topic = '' OR topic IS NULL)`, ch.topic, ch.name)
 	}
 
 	return &DB{db}, nil
