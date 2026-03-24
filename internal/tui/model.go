@@ -38,6 +38,24 @@ var appPalette = []struct {
 	{"Sky", "#00BFFF"}, {"Pink", "#FF69B4"}, {"Lime", "#ADFF2F"}, {"Yellow", "#F1C40F"},
 }
 
+func findThemeByColor(color string) (int, bool) {
+	for i, t := range appPalette {
+		if strings.EqualFold(t.Color, color) {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+func findThemeByName(name string) (int, bool) {
+	for i, t := range appPalette {
+		if strings.EqualFold(t.Name, name) {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
 type Model struct {
 	database *db.DB
 	broker   *pubsub.Broker
@@ -72,11 +90,8 @@ type Model struct {
 func (m *Model) applyTheme(color, themeName, successPrefix string) {
 	m.database.UpdateUserColor(m.user.ID, color)
 	m.user.Color = color
-	for i, t := range appPalette {
-		if t.Color == color {
-			m.paletteIndex = i
-			break
-		}
+	if idx, ok := findThemeByColor(color); ok {
+		m.paletteIndex = idx
 	}
 	m.appendSystemMsg(successPrefix + themeName + " (" + color + ")")
 	m.updateViewportContent()
@@ -162,11 +177,11 @@ func NewModel(database *db.DB, broker *pubsub.Broker, user *db.User, s ssh.Sessi
 		renderer:   r,
 	}
 
-	for i, t := range appPalette {
-		if t.Color == user.Color {
-			m.paletteIndex = i
-			break
-		}
+	if idx, ok := findThemeByColor(user.Color); ok {
+		m.paletteIndex = idx
+	} else {
+		m.paletteIndex = 0
+		m.user.Color = appPalette[0].Color
 	}
 
 	if user.IsVerified {
@@ -343,11 +358,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					switch cmd {
 					case "/theme":
 						if arg != "" {
-							for _, t := range appPalette {
-								if strings.EqualFold(t.Name, arg) {
-									m.applyTheme(t.Color, t.Name, "Applied theme: ")
-									return m, nil
-								}
+							if idx, ok := findThemeByName(arg); ok {
+								theme := appPalette[idx]
+								m.applyTheme(theme.Color, theme.Name, "Applied theme: ")
+								return m, nil
 							}
 							m.appendSystemMsg("Theme not found. Available: Ruby, Emerald, Sapphire, Gold, Amethyst, Orange, Teal, Sunset, Sky, Pink, Lime, Yellow")
 						}
@@ -659,7 +673,8 @@ func (m *Model) View() string {
 
 	// Header Panel
 	ch := m.channels[m.activeChan]
-	headerText := fmt.Sprintf("CLI-Net v1.0 | %s", ch.Name)
+	activeTheme := appPalette[m.paletteIndex]
+	headerText := fmt.Sprintf("CLI-Net v1.0 | %s | Theme: %s", ch.Name, activeTheme.Name)
 	if ch.Topic != "" {
 		headerText += fmt.Sprintf(" — %s", ch.Topic)
 	}
@@ -742,7 +757,14 @@ func (m *Model) View() string {
 	}
 
 	// SUPREME DYNAMIC UI
-	dynamicBorder := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color(m.user.Color))
+	borderKinds := []lipgloss.Border{
+		lipgloss.NormalBorder(),
+		lipgloss.RoundedBorder(),
+		lipgloss.DoubleBorder(),
+		lipgloss.ThickBorder(),
+	}
+	border := borderKinds[m.paletteIndex%len(borderKinds)]
+	dynamicBorder := lipgloss.NewStyle().Border(border).BorderForeground(lipgloss.Color(m.user.Color))
 	leftPane := dynamicBorder.Width(leftW).Height(midH).Render(leftPaneContent)
 
 	// Right Panel (Online)
