@@ -69,6 +69,19 @@ type Model struct {
 	renderer *glamour.TermRenderer
 }
 
+func (m *Model) applyTheme(color, themeName, successPrefix string) {
+	m.database.UpdateUserColor(m.user.ID, color)
+	m.user.Color = color
+	for i, t := range appPalette {
+		if t.Color == color {
+			m.paletteIndex = i
+			break
+		}
+	}
+	m.appendSystemMsg(successPrefix + themeName + " (" + color + ")")
+	m.updateViewportContent()
+}
+
 type newMsgMsg db.Message
 type imageFetchedMsg struct{ url, kitty string }
 
@@ -197,7 +210,6 @@ func (m *Model) waitForMessages() tea.Cmd {
 	}
 }
 
-
 func (m *Model) loadChannelMessages() {
 	m.messages = m.database.GetMessages(m.channels[m.activeChan].ID)
 	m.updateViewportContent()
@@ -207,7 +219,7 @@ func (m *Model) updateViewportContent() {
 	var b strings.Builder
 	for _, msg := range m.messages {
 		timeStr := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(msg.CreatedAt.Format("15:04"))
-		
+
 		if msg.UserID == "system" {
 			sysStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Italic(true)
 			b.WriteString(sysStyle.Render(msg.Content) + "\n")
@@ -295,11 +307,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if m.leftTab == 1 {
 				// Profile tab: Apply selected color
-				selectedColor := appPalette[m.paletteIndex].Color
-				m.database.UpdateUserColor(m.user.ID, selectedColor)
-				m.user.Color = selectedColor
-				m.appendSystemMsg("Successfully applied theme: " + appPalette[m.paletteIndex].Name + " (" + selectedColor + ")")
-				m.updateViewportContent()
+				selected := appPalette[m.paletteIndex]
+				m.applyTheme(selected.Color, selected.Name, "Successfully applied theme: ")
 				return m, nil
 			}
 
@@ -336,10 +345,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						if arg != "" {
 							for _, t := range appPalette {
 								if strings.EqualFold(t.Name, arg) {
-									m.database.UpdateUserColor(m.user.ID, t.Color)
-									m.user.Color = t.Color
-									m.appendSystemMsg("Applied theme: " + t.Name)
-									m.updateViewportContent()
+									m.applyTheme(t.Color, t.Name, "Applied theme: ")
 									return m, nil
 								}
 							}
@@ -560,11 +566,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case tea.KeySpace:
 			if m.leftTab == 1 {
-				selectedColor := appPalette[m.paletteIndex].Color
-				m.database.UpdateUserColor(m.user.ID, selectedColor)
-				m.user.Color = selectedColor
-				m.appendSystemMsg("Theme selected via Space: " + appPalette[m.paletteIndex].Name)
-				m.updateViewportContent()
+				selected := appPalette[m.paletteIndex]
+				m.applyTheme(selected.Color, selected.Name, "Theme selected via Space: ")
 				return m, nil
 			}
 
@@ -622,12 +625,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-var (
-	leftPaneStyle   = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("238"))
-	centerPaneStyle = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("238"))
-	bottomPaneStyle = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("238"))
-)
-
 func (m *Model) View() string {
 	if m.width == 0 {
 		return "Initializing...\n"
@@ -677,7 +674,7 @@ func (m *Model) View() string {
 	// Left Panel (Channels OR Profile)
 	var leftPaneContent string
 	tabChannels := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render
-	tabActive := lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render
+	tabActive := lipgloss.NewStyle().Foreground(lipgloss.Color(m.user.Color)).Bold(true).Render
 	tabBar := ""
 	if m.leftTab == 0 {
 		tabBar = tabActive("  CHANNELS") + "  " + tabChannels("PROFILE")
@@ -696,11 +693,11 @@ func (m *Model) View() string {
 		}
 	} else {
 		// Profile/Settings tab
-		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render("  ── IDENTIFICATION") + "\n\n"
-		
+		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color(m.user.Color)).Bold(true).Render("  ── IDENTIFICATION") + "\n\n"
+
 		colorDot := lipgloss.NewStyle().Foreground(lipgloss.Color(m.user.Color)).Render("●")
 		leftPaneContent += "  " + colorDot + " " + lipgloss.NewStyle().Bold(true).Render(m.user.Username) + "\n"
-		
+
 		roleIcon := ""
 		roleName := m.user.Role
 		switch m.user.Role {
@@ -715,36 +712,35 @@ func (m *Model) View() string {
 			roleName = "User"
 		}
 		leftPaneContent += "  " + roleIcon + roleName + "\n\n"
-		
-		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render("  ── APPEARANCE") + "\n\n"
+
+		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color(m.user.Color)).Bold(true).Render("  ── APPEARANCE") + "\n\n"
 
 		for i, t := range appPalette {
 			pointer := "  "
 			dot := "○ "
 			style := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Color))
-			
+
 			if t.Color == m.user.Color {
 				dot = "● " // Currently active
 			}
-			
+
 			if i == m.paletteIndex {
 				pointer = "▸ "
-				// ULTRA HIGH CONTRAST FOCUS
-				style = style.Bold(true).Background(lipgloss.Color("15")).Foreground(lipgloss.Color("0")).PaddingRight(1)
+				style = style.Bold(true).Underline(true).PaddingRight(1)
 				if t.Color == m.user.Color {
-					style = style.Underline(true).Italic(true)
+					style = style.Italic(true)
 				}
 			}
-			
+
 			leftPaneContent += " " + pointer + style.Render(dot+t.Name) + "\n"
 		}
-		
+
 		leftPaneContent += "\n"
 		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color(m.user.Color)).Bold(true).Render("  [ ENTER/SPACE ] to set") + "\n"
 		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("  Arrows/Tab: navigate") + "\n"
 		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("  /theme <name>") + "\n"
 	}
-	
+
 	// SUPREME DYNAMIC UI
 	dynamicBorder := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color(m.user.Color))
 	leftPane := dynamicBorder.Width(leftW).Height(midH).Render(leftPaneContent)
@@ -769,17 +765,17 @@ func (m *Model) View() string {
 		}
 		onlineStr += lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render("  • "+roleBadge+u.Username+isMe) + "\n"
 	}
-	rightPane := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("238")).Width(rightW).Height(midH).Render("\n  ONLINE\n\n" + onlineStr)
+	rightPane := dynamicBorder.Width(rightW).Height(midH).Render("\n  ONLINE\n\n" + onlineStr)
 
 	// Center Panel (Feed)
 	m.viewport.Width = centerW
 	m.viewport.Height = midH
-	centerPane := centerPaneStyle.Width(centerW).Height(midH).Render(m.viewport.View())
+	centerPane := dynamicBorder.Width(centerW).Height(midH).Render(m.viewport.View())
 
 	// Bottom Panel (Input)
 	m.input.SetWidth(m.width - 2)
 	m.input.SetHeight(1)
-	bottomPane := bottomPaneStyle.Width(m.width - 2).Height(1).Render(m.input.View())
+	bottomPane := dynamicBorder.Width(m.width - 2).Height(1).Render(m.input.View())
 
 	midSection := lipgloss.JoinHorizontal(lipgloss.Top, leftPane, centerPane, rightPane)
 	return lipgloss.JoinVertical(lipgloss.Left, header, midSection, bottomPane)
