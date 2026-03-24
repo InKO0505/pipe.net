@@ -2,6 +2,7 @@
 package tui
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"image"
@@ -109,7 +110,7 @@ func fetchImageCmd(url string, targetWidth int) tea.Cmd {
 		}
 
 		// Decode image for ANSI fallback
-		img, _, decodeErr := image.Decode(strings.NewReader(string(data)))
+		img, _, decodeErr := image.Decode(bytes.NewReader(data))
 		ansi := ""
 		if decodeErr == nil {
 			ansi = renderHalfBlocks(img, targetWidth)
