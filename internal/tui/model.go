@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -66,17 +67,34 @@ func fetchImageCmd(url string) tea.Cmd {
 		if v, ok := globalImageCache.Load(url); ok {
 			return imageFetchedMsg{url: url, kitty: v.(string)}
 		}
-		resp, err := http.Get(url) //nolint:gosec
+
+		var data []byte
+		var err error
+
+		if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
+			resp, httpErr := http.Get(url) //nolint:gosec
+			if httpErr != nil {
+				globalImageCache.Store(url, "")
+				return imageFetchedMsg{url: url, kitty: ""}
+			}
+			defer resp.Body.Close()
+			data, err = io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10 MB limit
+		} else {
+			// Try local file
+			f, openErr := os.Open(url)
+			if openErr != nil {
+				globalImageCache.Store(url, "")
+				return imageFetchedMsg{url: url, kitty: ""}
+			}
+			defer f.Close()
+			data, err = io.ReadAll(io.LimitReader(f, 10<<20)) // 10 MB limit
+		}
+
 		if err != nil {
 			globalImageCache.Store(url, "")
 			return imageFetchedMsg{url: url, kitty: ""}
 		}
-		defer resp.Body.Close()
-		data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20)) // 8 MB limit
-		if err != nil {
-			globalImageCache.Store(url, "")
-			return imageFetchedMsg{url: url, kitty: ""}
-		}
+
 		kitty := encodeKittyImage(data)
 		globalImageCache.Store(url, kitty)
 		return imageFetchedMsg{url: url, kitty: kitty}
