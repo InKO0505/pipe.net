@@ -199,10 +199,9 @@ func NewModel(database *db.DB, broker *pubsub.Broker, user *db.User, s ssh.Sessi
 	questIn.CharLimit = 50
 
 	mainIn := textarea.New()
-	mainIn.Placeholder = "Write a message... (Tip: Use ``` for code blocks)"
+	mainIn.Placeholder = "Ctrl+C to Quit • Tab to switch channels • Ctrl+Y to copy last msg"
 	mainIn.Focus()
-	mainIn.CharLimit = 2000
-	mainIn.SetHeight(3)
+	mainIn.CharLimit = 500
 
 	vp := viewport.New(0, 0)
 	secretPlainText := "let me in"
@@ -800,29 +799,29 @@ func (m *Model) View() string {
 		centerW = 10
 	}
 
-	headerH := 0
-	topicH := 1
-	footerH := 5
-	midH := m.height - headerH - topicH - footerH
+	headerH := 2
+	footerH := 3
+	midH := m.height - headerH - footerH
 	if midH < 5 {
 		midH = 5
 	}
 
-	// Topic Bar (Above Input)
+	// Header Panel
 	ch := m.channels[m.activeChan]
+	headerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#ffffff")).
+		Background(lipgloss.Color(m.user.Color)).
+		Bold(true).
+		Width(m.width).
+		Align(lipgloss.Center)
+
 	topicStr := "No topic set"
 	if ch.Topic != "" {
 		topicStr = ch.Topic
 	}
 
-	topicStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#ffffff")).
-		Background(lipgloss.Color(m.user.Color)).
-		Padding(0, 1).
-		Width(m.width)
-
-	topicBar := topicStyle.Render(fmt.Sprintf(" Topic: %s ", topicStr))
+	headerText := fmt.Sprintf(" %s  •  Topic: %s ", ch.Name, topicStr)
+	header := headerStyle.Render(headerText)
 
 	// Left Panel (Channels)
 	var leftPaneContent string
@@ -869,8 +868,9 @@ func (m *Model) View() string {
 
 	// Bottom Panel (Input)
 	m.input.SetWidth(m.width - 2)
-	bottomPane := dynamicBorder.Width(m.width - 2).Height(3).Render(m.input.View())
+	m.input.SetHeight(1)
+	bottomPane := dynamicBorder.Width(m.width - 2).Height(1).Render(m.input.View())
 
 	midSection := lipgloss.JoinHorizontal(lipgloss.Top, leftPane, centerPane, rightPane)
-	return lipgloss.JoinVertical(lipgloss.Left, midSection, topicBar, bottomPane)
+	return lipgloss.JoinVertical(lipgloss.Left, header, midSection, bottomPane)
 }
