@@ -56,10 +56,13 @@ type Model struct {
 	messages   []db.Message
 	viewport   viewport.Model
 	input      textarea.Model
-
-	msgSub   chan db.Message
-	isSubbed bool
+	msgSub     chan db.Message
+	isSubbed   bool
 	renderer *glamour.TermRenderer
+
+	commands    []string
+	tabPrefix   string
+	tabMatchIdx int
 }
 
 
@@ -239,6 +242,12 @@ func NewModel(database *db.DB, broker *pubsub.Broker, user *db.User, s ssh.Sessi
 
 	if user.IsBanned {
 		m.appState = bannedState
+	}
+
+	m.commands = []string{
+		"/nick", "/clear", "/help", "/img", "/op", "/deop",
+		"/kick", "/ban", "/unban", "/newchan", "/delchan",
+		"/topic", "/del", "/setowner",
 	}
 
 	return m
@@ -631,6 +640,33 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case tea.KeyTab:
 			if m.appState == mainState {
+				val := m.input.Value()
+				if strings.HasPrefix(val, "/") && !strings.Contains(val, " ") {
+					// Autocomplete mode
+					if m.tabPrefix == "" {
+						m.tabPrefix = val
+						m.tabMatchIdx = 0
+					}
+
+					var matches []string
+					for _, cmd := range m.commands {
+						if strings.HasPrefix(cmd, m.tabPrefix) {
+							matches = append(matches, cmd)
+						}
+					}
+
+					if len(matches) > 0 {
+						m.input.SetValue(matches[m.tabMatchIdx%len(matches)] + " ")
+						m.input.CursorEnd()
+						m.tabMatchIdx++
+					}
+					return m, nil
+				}
+
+				// Reset autocomplete if not in it
+				m.tabPrefix = ""
+
+				// Default channel switching
 				if len(m.channels) > 0 {
 					if m.isSubbed && m.msgSub != nil {
 						m.broker.Unsubscribe(m.channels[m.activeChan].ID, m.msgSub)
@@ -643,6 +679,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, m.waitForMessages()
 				}
 			}
+
+		case tea.KeyRunes:
+			// Reset autocomplete when typing
+			m.tabPrefix = ""
 
 
 		case tea.KeyCtrlY: // Specific Key To Trigger OSC 52 Copy for Last Message
@@ -759,29 +799,28 @@ func (m *Model) View() string {
 		centerW = 10
 	}
 
-	headerH := 2
+	headerH := 0
 	footerH := 3
 	midH := m.height - headerH - footerH
 	if midH < 5 {
 		midH = 5
 	}
 
-	// Header Panel
+	// Center Panel (Feed + Pinned Topic)
 	ch := m.channels[m.activeChan]
-	headerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#ffffff")).
-		Background(lipgloss.Color(m.user.Color)).
-		Bold(true).
-		Width(m.width).
-		Align(lipgloss.Center)
-
 	topicStr := "No topic set"
 	if ch.Topic != "" {
 		topicStr = ch.Topic
 	}
 
-	headerText := fmt.Sprintf(" %s  •  Topic: %s ", ch.Name, topicStr)
-	header := headerStyle.Render(headerText)
+	headerStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#ffffff")).
+		Background(lipgloss.Color(m.user.Color)).
+		Padding(0, 1)
+
+	headerText := fmt.Sprintf("%s | Topic: %s", ch.Name, topicStr)
+	centerHeader := headerStyle.Width(centerW).Render(headerText)
 
 	// Left Panel (Channels)
 	var leftPaneContent string
@@ -823,8 +862,10 @@ func (m *Model) View() string {
 
 	// Center Panel (Feed)
 	m.viewport.Width = centerW
-	m.viewport.Height = midH
-	centerPane := dynamicBorder.Width(centerW).Height(midH).Render(m.viewport.View())
+	m.viewport.Height = midH - 1 // Leave room for pinned header
+	centerPane := dynamicBorder.Width(centerW).Height(midH).Render(
+		lipgloss.JoinVertical(lipgloss.Left, centerHeader, m.viewport.View()),
+	)
 
 	// Bottom Panel (Input)
 	m.input.SetWidth(m.width - 2)
@@ -832,5 +873,5 @@ func (m *Model) View() string {
 	bottomPane := dynamicBorder.Width(m.width - 2).Height(1).Render(m.input.View())
 
 	midSection := lipgloss.JoinHorizontal(lipgloss.Top, leftPane, centerPane, rightPane)
-	return lipgloss.JoinVertical(lipgloss.Left, header, midSection, bottomPane)
+	return lipgloss.JoinVertical(lipgloss.Left, midSection, bottomPane)
 }
