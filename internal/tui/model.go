@@ -32,10 +32,37 @@ const (
 var appPalette = []struct {
 	Name  string
 	Color string
+	Mark  string
 }{
-	{"Ruby", "#E74C3C"}, {"Emerald", "#33FF57"}, {"Sapphire", "#3357FF"}, {"Gold", "#FFD700"},
-	{"Amethyst", "#9B59B6"}, {"Orange", "#E67E22"}, {"Teal", "#1ABC9C"}, {"Sunset", "#FF5733"},
-	{"Sky", "#00BFFF"}, {"Pink", "#FF69B4"}, {"Lime", "#ADFF2F"}, {"Yellow", "#F1C40F"},
+	{"Ruby", "#E74C3C", "◆"}, {"Emerald", "#33FF57", "●"}, {"Sapphire", "#3357FF", "■"}, {"Gold", "#FFD700", "✦"},
+	{"Amethyst", "#9B59B6", "⬟"}, {"Orange", "#E67E22", "⬢"}, {"Teal", "#1ABC9C", "◉"}, {"Sunset", "#FF5733", "▲"},
+	{"Sky", "#00BFFF", "◌"}, {"Pink", "#FF69B4", "♥"}, {"Lime", "#ADFF2F", "✳"}, {"Yellow", "#F1C40F", "☀"},
+}
+
+func findThemeByColor(color string) (int, bool) {
+	for i, t := range appPalette {
+		if strings.EqualFold(t.Color, color) {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+func findThemeByName(name string) (int, bool) {
+	for i, t := range appPalette {
+		if strings.EqualFold(t.Name, name) {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+func (m *Model) currentTheme() struct {
+	Name  string
+	Color string
+	Mark  string
+} {
+	return appPalette[m.paletteIndex]
 }
 
 func findThemeByColor(color string) (int, bool) {
@@ -357,6 +384,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 					switch cmd {
 					case "/theme":
+						if arg == "" {
+							active := m.currentTheme()
+							m.appendSystemMsg("Current theme: " + active.Name + " (" + active.Color + ")")
+							break
+						}
 						if arg != "" {
 							if idx, ok := findThemeByName(arg); ok {
 								theme := appPalette[idx]
@@ -365,6 +397,23 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							}
 							m.appendSystemMsg("Theme not found. Available: Ruby, Emerald, Sapphire, Gold, Amethyst, Orange, Teal, Sunset, Sky, Pink, Lime, Yellow")
 						}
+					case "/themes":
+						var available []string
+						for _, theme := range appPalette {
+							available = append(available, theme.Name)
+						}
+						m.appendSystemMsg("Themes: " + strings.Join(available, ", "))
+					case "/color":
+						if arg == "" {
+							m.appendSystemMsg("Usage: /color <theme-name>")
+							break
+						}
+						if idx, ok := findThemeByName(arg); ok {
+							theme := appPalette[idx]
+							m.applyTheme(theme.Color, theme.Name, "Applied theme: ")
+							return m, nil
+						}
+						m.appendSystemMsg("Color preset not found. Use /themes.")
 					case "/nick":
 						if arg != "" {
 							m.database.UpdateUsername(m.user.ID, arg)
@@ -381,6 +430,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						help := border("┌── ") + title("HELP") + border(" ──────────────────────────────────────┐") + "\n"
 						help += border("│ ") + cmd("/nick <name>") + "   change your nickname" + "\n"
 						help += border("│ ") + cmd("/clear") + "         clear screen" + "\n"
+						help += border("│ ") + cmd("/themes") + "        list available themes" + "\n"
+						help += border("│ ") + cmd("/theme <name>") + "  apply theme by name" + "\n"
 						help += border("│ ") + cmd("/img <url>") + "     share an image or GIF" + "\n"
 						if isAdmin || isOwner {
 							help += border("├── ") + title("ADMIN") + border(" ───────────────────────────────────┤") + "\n"
@@ -673,8 +724,8 @@ func (m *Model) View() string {
 
 	// Header Panel
 	ch := m.channels[m.activeChan]
-	activeTheme := appPalette[m.paletteIndex]
-	headerText := fmt.Sprintf("CLI-Net v1.0 | %s | Theme: %s", ch.Name, activeTheme.Name)
+	activeTheme := m.currentTheme()
+	headerText := fmt.Sprintf("CLI-Net v1.0 | %s | Theme: %s %s", ch.Name, activeTheme.Name, activeTheme.Mark)
 	if ch.Topic != "" {
 		headerText += fmt.Sprintf(" — %s", ch.Topic)
 	}
@@ -753,7 +804,7 @@ func (m *Model) View() string {
 		leftPaneContent += "\n"
 		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color(m.user.Color)).Bold(true).Render("  [ ENTER/SPACE ] to set") + "\n"
 		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("  Arrows/Tab: navigate") + "\n"
-		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("  /theme <name>") + "\n"
+		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("  /theme <name> • /themes") + "\n"
 	}
 
 	// SUPREME DYNAMIC UI
