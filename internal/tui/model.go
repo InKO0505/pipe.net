@@ -32,10 +32,37 @@ const (
 var appPalette = []struct {
 	Name  string
 	Color string
+	Mark  string
 }{
-	{"Ruby", "#E74C3C"}, {"Emerald", "#33FF57"}, {"Sapphire", "#3357FF"}, {"Gold", "#FFD700"},
-	{"Amethyst", "#9B59B6"}, {"Orange", "#E67E22"}, {"Teal", "#1ABC9C"}, {"Sunset", "#FF5733"},
-	{"Sky", "#00BFFF"}, {"Pink", "#FF69B4"}, {"Lime", "#ADFF2F"}, {"Yellow", "#F1C40F"},
+	{"Ruby", "#E74C3C", "◆"}, {"Emerald", "#33FF57", "●"}, {"Sapphire", "#3357FF", "■"}, {"Gold", "#FFD700", "✦"},
+	{"Amethyst", "#9B59B6", "⬟"}, {"Orange", "#E67E22", "⬢"}, {"Teal", "#1ABC9C", "◉"}, {"Sunset", "#FF5733", "▲"},
+	{"Sky", "#00BFFF", "◌"}, {"Pink", "#FF69B4", "♥"}, {"Lime", "#ADFF2F", "✳"}, {"Yellow", "#F1C40F", "☀"},
+}
+
+func findThemeByColor(color string) (int, bool) {
+	for i, t := range appPalette {
+		if strings.EqualFold(t.Color, color) {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+func findThemeByName(name string) (int, bool) {
+	for i, t := range appPalette {
+		if strings.EqualFold(t.Name, name) {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+func (m *Model) currentTheme() struct {
+	Name  string
+	Color string
+	Mark  string
+} {
+	return appPalette[m.paletteIndex]
 }
 
 type Model struct {
@@ -67,6 +94,16 @@ type Model struct {
 	msgSub   chan db.Message
 	isSubbed bool
 	renderer *glamour.TermRenderer
+}
+
+func (m *Model) applyTheme(color, themeName, successPrefix string) {
+	m.database.UpdateUserColor(m.user.ID, color)
+	m.user.Color = color
+	if idx, ok := findThemeByColor(color); ok {
+		m.paletteIndex = idx
+	}
+	m.appendSystemMsg(successPrefix + themeName + " (" + color + ")")
+	m.updateViewportContent()
 }
 
 type newMsgMsg db.Message
@@ -149,11 +186,11 @@ func NewModel(database *db.DB, broker *pubsub.Broker, user *db.User, s ssh.Sessi
 		renderer:   r,
 	}
 
-	for i, t := range appPalette {
-		if t.Color == user.Color {
-			m.paletteIndex = i
-			break
-		}
+	if idx, ok := findThemeByColor(user.Color); ok {
+		m.paletteIndex = idx
+	} else {
+		m.paletteIndex = 0
+		m.user.Color = appPalette[0].Color
 	}
 
 	if user.IsVerified {
@@ -197,7 +234,6 @@ func (m *Model) waitForMessages() tea.Cmd {
 	}
 }
 
-
 func (m *Model) loadChannelMessages() {
 	m.messages = m.database.GetMessages(m.channels[m.activeChan].ID)
 	m.updateViewportContent()
@@ -207,7 +243,7 @@ func (m *Model) updateViewportContent() {
 	var b strings.Builder
 	for _, msg := range m.messages {
 		timeStr := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(msg.CreatedAt.Format("15:04"))
-		
+
 		if msg.UserID == "system" {
 			sysStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Italic(true)
 			b.WriteString(sysStyle.Render(msg.Content) + "\n")
@@ -295,11 +331,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if m.leftTab == 1 {
 				// Profile tab: Apply selected color
-				selectedColor := appPalette[m.paletteIndex].Color
-				m.database.UpdateUserColor(m.user.ID, selectedColor)
-				m.user.Color = selectedColor
-				m.appendSystemMsg("Successfully applied theme: " + appPalette[m.paletteIndex].Name + " (" + selectedColor + ")")
-				m.updateViewportContent()
+				selected := appPalette[m.paletteIndex]
+				m.applyTheme(selected.Color, selected.Name, "Successfully applied theme: ")
 				return m, nil
 			}
 
@@ -333,18 +366,36 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 					switch cmd {
 					case "/theme":
+						if arg == "" {
+							active := m.currentTheme()
+							m.appendSystemMsg("Current theme: " + active.Name + " (" + active.Color + ")")
+							break
+						}
 						if arg != "" {
-							for _, t := range appPalette {
-								if strings.EqualFold(t.Name, arg) {
-									m.database.UpdateUserColor(m.user.ID, t.Color)
-									m.user.Color = t.Color
-									m.appendSystemMsg("Applied theme: " + t.Name)
-									m.updateViewportContent()
-									return m, nil
-								}
+							if idx, ok := findThemeByName(arg); ok {
+								theme := appPalette[idx]
+								m.applyTheme(theme.Color, theme.Name, "Applied theme: ")
+								return m, nil
 							}
 							m.appendSystemMsg("Theme not found. Available: Ruby, Emerald, Sapphire, Gold, Amethyst, Orange, Teal, Sunset, Sky, Pink, Lime, Yellow")
 						}
+					case "/themes":
+						var available []string
+						for _, theme := range appPalette {
+							available = append(available, theme.Name)
+						}
+						m.appendSystemMsg("Themes: " + strings.Join(available, ", "))
+					case "/color":
+						if arg == "" {
+							m.appendSystemMsg("Usage: /color <theme-name>")
+							break
+						}
+						if idx, ok := findThemeByName(arg); ok {
+							theme := appPalette[idx]
+							m.applyTheme(theme.Color, theme.Name, "Applied theme: ")
+							return m, nil
+						}
+						m.appendSystemMsg("Color preset not found. Use /themes.")
 					case "/nick":
 						if arg != "" {
 							m.database.UpdateUsername(m.user.ID, arg)
@@ -361,6 +412,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						help := border("┌── ") + title("HELP") + border(" ──────────────────────────────────────┐") + "\n"
 						help += border("│ ") + cmd("/nick <name>") + "   change your nickname" + "\n"
 						help += border("│ ") + cmd("/clear") + "         clear screen" + "\n"
+						help += border("│ ") + cmd("/themes") + "        list available themes" + "\n"
+						help += border("│ ") + cmd("/theme <name>") + "  apply theme by name" + "\n"
 						help += border("│ ") + cmd("/img <url>") + "     share an image or GIF" + "\n"
 						if isAdmin || isOwner {
 							help += border("├── ") + title("ADMIN") + border(" ───────────────────────────────────┤") + "\n"
@@ -560,11 +613,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case tea.KeySpace:
 			if m.leftTab == 1 {
-				selectedColor := appPalette[m.paletteIndex].Color
-				m.database.UpdateUserColor(m.user.ID, selectedColor)
-				m.user.Color = selectedColor
-				m.appendSystemMsg("Theme selected via Space: " + appPalette[m.paletteIndex].Name)
-				m.updateViewportContent()
+				selected := appPalette[m.paletteIndex]
+				m.applyTheme(selected.Color, selected.Name, "Theme selected via Space: ")
 				return m, nil
 			}
 
@@ -622,12 +672,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-var (
-	leftPaneStyle   = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("238"))
-	centerPaneStyle = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("238"))
-	bottomPaneStyle = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("238"))
-)
-
 func (m *Model) View() string {
 	if m.width == 0 {
 		return "Initializing...\n"
@@ -662,7 +706,8 @@ func (m *Model) View() string {
 
 	// Header Panel
 	ch := m.channels[m.activeChan]
-	headerText := fmt.Sprintf("CLI-Net v1.0 | %s", ch.Name)
+	activeTheme := m.currentTheme()
+	headerText := fmt.Sprintf("CLI-Net v1.0 | %s | Theme: %s %s", ch.Name, activeTheme.Name, activeTheme.Mark)
 	if ch.Topic != "" {
 		headerText += fmt.Sprintf(" — %s", ch.Topic)
 	}
@@ -677,7 +722,7 @@ func (m *Model) View() string {
 	// Left Panel (Channels OR Profile)
 	var leftPaneContent string
 	tabChannels := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render
-	tabActive := lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render
+	tabActive := lipgloss.NewStyle().Foreground(lipgloss.Color(m.user.Color)).Bold(true).Render
 	tabBar := ""
 	if m.leftTab == 0 {
 		tabBar = tabActive("  CHANNELS") + "  " + tabChannels("PROFILE")
@@ -696,11 +741,11 @@ func (m *Model) View() string {
 		}
 	} else {
 		// Profile/Settings tab
-		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render("  ── IDENTIFICATION") + "\n\n"
-		
+		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color(m.user.Color)).Bold(true).Render("  ── IDENTIFICATION") + "\n\n"
+
 		colorDot := lipgloss.NewStyle().Foreground(lipgloss.Color(m.user.Color)).Render("●")
 		leftPaneContent += "  " + colorDot + " " + lipgloss.NewStyle().Bold(true).Render(m.user.Username) + "\n"
-		
+
 		roleIcon := ""
 		roleName := m.user.Role
 		switch m.user.Role {
@@ -715,38 +760,44 @@ func (m *Model) View() string {
 			roleName = "User"
 		}
 		leftPaneContent += "  " + roleIcon + roleName + "\n\n"
-		
-		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render("  ── APPEARANCE") + "\n\n"
+
+		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color(m.user.Color)).Bold(true).Render("  ── APPEARANCE") + "\n\n"
 
 		for i, t := range appPalette {
 			pointer := "  "
 			dot := "○ "
 			style := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Color))
-			
+
 			if t.Color == m.user.Color {
 				dot = "● " // Currently active
 			}
-			
+
 			if i == m.paletteIndex {
 				pointer = "▸ "
-				// ULTRA HIGH CONTRAST FOCUS
-				style = style.Bold(true).Background(lipgloss.Color("15")).Foreground(lipgloss.Color("0")).PaddingRight(1)
+				style = style.Bold(true).Underline(true).PaddingRight(1)
 				if t.Color == m.user.Color {
-					style = style.Underline(true).Italic(true)
+					style = style.Italic(true)
 				}
 			}
-			
+
 			leftPaneContent += " " + pointer + style.Render(dot+t.Name) + "\n"
 		}
-		
+
 		leftPaneContent += "\n"
 		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color(m.user.Color)).Bold(true).Render("  [ ENTER/SPACE ] to set") + "\n"
 		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("  Arrows/Tab: navigate") + "\n"
-		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("  /theme <name>") + "\n"
+		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("  /theme <name> • /themes") + "\n"
 	}
-	
+
 	// SUPREME DYNAMIC UI
-	dynamicBorder := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color(m.user.Color))
+	borderKinds := []lipgloss.Border{
+		lipgloss.NormalBorder(),
+		lipgloss.RoundedBorder(),
+		lipgloss.DoubleBorder(),
+		lipgloss.ThickBorder(),
+	}
+	border := borderKinds[m.paletteIndex%len(borderKinds)]
+	dynamicBorder := lipgloss.NewStyle().Border(border).BorderForeground(lipgloss.Color(m.user.Color))
 	leftPane := dynamicBorder.Width(leftW).Height(midH).Render(leftPaneContent)
 
 	// Right Panel (Online)
@@ -769,17 +820,17 @@ func (m *Model) View() string {
 		}
 		onlineStr += lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render("  • "+roleBadge+u.Username+isMe) + "\n"
 	}
-	rightPane := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("238")).Width(rightW).Height(midH).Render("\n  ONLINE\n\n" + onlineStr)
+	rightPane := dynamicBorder.Width(rightW).Height(midH).Render("\n  ONLINE\n\n" + onlineStr)
 
 	// Center Panel (Feed)
 	m.viewport.Width = centerW
 	m.viewport.Height = midH
-	centerPane := centerPaneStyle.Width(centerW).Height(midH).Render(m.viewport.View())
+	centerPane := dynamicBorder.Width(centerW).Height(midH).Render(m.viewport.View())
 
 	// Bottom Panel (Input)
 	m.input.SetWidth(m.width - 2)
 	m.input.SetHeight(1)
-	bottomPane := bottomPaneStyle.Width(m.width - 2).Height(1).Render(m.input.View())
+	bottomPane := dynamicBorder.Width(m.width - 2).Height(1).Render(m.input.View())
 
 	midSection := lipgloss.JoinHorizontal(lipgloss.Top, leftPane, centerPane, rightPane)
 	return lipgloss.JoinVertical(lipgloss.Left, header, midSection, bottomPane)
