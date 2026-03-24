@@ -116,8 +116,7 @@ func (db *DB) GetUserByUsername(username string) (*User, error) {
 }
 
 func (db *DB) CreateUser(pubKey string) *User {
-	colors := []string{"#FF5733", "#33FF57", "#3357FF", "#F1C40F", "#9B59B6", "#E67E22", "#1ABC9C", "#E74C3C"}
-	color := colors[time.Now().UnixNano()%int64(len(colors))]
+	color := "#6366F1" // Default Indigo color
 
 	var count int
 	db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
@@ -158,12 +157,6 @@ func (db *DB) UpdateUsername(userID, newName string) {
 	}
 }
 
-func (db *DB) UpdateUserColor(userID, color string) {
-	_, err := db.Exec("UPDATE users SET color = ? WHERE id = ?", color, userID)
-	if err != nil {
-		log.Printf("Error updating color: %v\n", err)
-	}
-}
 
 func (db *DB) SetUserRole(userID, role string) {
 	_, err := db.Exec("UPDATE users SET role = ? WHERE id = ?", role, userID)

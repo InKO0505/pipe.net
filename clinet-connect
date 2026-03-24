@@ -1,3 +1,0 @@
-#!/bin/bash
-echo "Connecting to CLI-Net v1.0..."
-ssh -p 2222 localhost

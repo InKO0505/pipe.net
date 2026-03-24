@@ -13,3 +13,4 @@ clinet.db
 # Logs and test files
 server.log
 test_ssh.exp
+clinet-connect

