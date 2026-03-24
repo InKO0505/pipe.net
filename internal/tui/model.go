@@ -199,9 +199,9 @@ func NewModel(database *db.DB, broker *pubsub.Broker, user *db.User, s ssh.Sessi
 	questIn.CharLimit = 50
 
 	mainIn := textarea.New()
-	mainIn.Placeholder = "Ctrl+C to Quit • Tab to switch channels • Ctrl+Y to copy last msg"
+	mainIn.Placeholder = "Message..."
 	mainIn.Focus()
-	mainIn.CharLimit = 500
+	mainIn.CharLimit = 2000
 
 	vp := viewport.New(0, 0)
 	secretPlainText := "let me in"
@@ -800,7 +800,22 @@ func (m *Model) View() string {
 	}
 
 	headerH := 2
-	footerH := 3
+	
+	// Smart Scaling for Input
+	inputH := 1
+	if m.height >= 40 {
+		inputH = 5
+	} else if m.height >= 25 {
+		inputH = 3
+	}
+	
+	// Guard: Ensure chat feed (midH) always has at least 8 lines
+	footerH := inputH + 2 // 2 for borders
+	if m.height-headerH-footerH < 8 {
+		inputH = 1
+		footerH = 3
+	}
+	
 	midH := m.height - headerH - footerH
 	if midH < 5 {
 		midH = 5
@@ -868,8 +883,8 @@ func (m *Model) View() string {
 
 	// Bottom Panel (Input)
 	m.input.SetWidth(m.width - 2)
-	m.input.SetHeight(1)
-	bottomPane := dynamicBorder.Width(m.width - 2).Height(1).Render(m.input.View())
+	m.input.SetHeight(inputH)
+	bottomPane := dynamicBorder.Width(m.width - 2).Height(inputH).Render(m.input.View())
 
 	midSection := lipgloss.JoinHorizontal(lipgloss.Top, leftPane, centerPane, rightPane)
 	return lipgloss.JoinVertical(lipgloss.Left, header, midSection, bottomPane)
