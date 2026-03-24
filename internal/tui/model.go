@@ -800,27 +800,28 @@ func (m *Model) View() string {
 	}
 
 	headerH := 0
+	topicH := 1
 	footerH := 3
-	midH := m.height - headerH - footerH
+	midH := m.height - headerH - topicH - footerH
 	if midH < 5 {
 		midH = 5
 	}
 
-	// Center Panel (Feed + Pinned Topic)
+	// Topic Bar (Above Input)
 	ch := m.channels[m.activeChan]
 	topicStr := "No topic set"
 	if ch.Topic != "" {
 		topicStr = ch.Topic
 	}
 
-	headerStyle := lipgloss.NewStyle().
+	topicStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("#ffffff")).
 		Background(lipgloss.Color(m.user.Color)).
-		Padding(0, 1)
+		Padding(0, 1).
+		Width(m.width)
 
-	headerText := fmt.Sprintf("%s | Topic: %s", ch.Name, topicStr)
-	centerHeader := headerStyle.Width(centerW).Render(headerText)
+	topicBar := topicStyle.Render(fmt.Sprintf(" Topic: %s ", topicStr))
 
 	// Left Panel (Channels)
 	var leftPaneContent string
@@ -862,10 +863,8 @@ func (m *Model) View() string {
 
 	// Center Panel (Feed)
 	m.viewport.Width = centerW
-	m.viewport.Height = midH - 1 // Leave room for pinned header
-	centerPane := dynamicBorder.Width(centerW).Height(midH).Render(
-		lipgloss.JoinVertical(lipgloss.Left, centerHeader, m.viewport.View()),
-	)
+	m.viewport.Height = midH
+	centerPane := dynamicBorder.Width(centerW).Height(midH).Render(m.viewport.View())
 
 	// Bottom Panel (Input)
 	m.input.SetWidth(m.width - 2)
@@ -873,5 +872,5 @@ func (m *Model) View() string {
 	bottomPane := dynamicBorder.Width(m.width - 2).Height(1).Render(m.input.View())
 
 	midSection := lipgloss.JoinHorizontal(lipgloss.Top, leftPane, centerPane, rightPane)
-	return lipgloss.JoinVertical(lipgloss.Left, midSection, bottomPane)
+	return lipgloss.JoinVertical(lipgloss.Left, midSection, topicBar, bottomPane)
 }
