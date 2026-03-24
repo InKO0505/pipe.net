@@ -302,3 +302,21 @@ func (db *DB) DeleteChannel(id string) error {
 
 	return tx.Commit()
 }
+
+func (db *DB) ClearChannelMessages(channelID string) error {
+	_, err := db.Exec("DELETE FROM messages WHERE channel_id = ?", channelID)
+	return err
+}
+
+func (db *DB) DeleteLastMessage(channelID string) error {
+	_, err := db.Exec(`
+		DELETE FROM messages 
+		WHERE id = (
+			SELECT id FROM messages 
+			WHERE channel_id = ? 
+			ORDER BY created_at DESC 
+			LIMIT 1
+		)
+	`, channelID)
+	return err
+}

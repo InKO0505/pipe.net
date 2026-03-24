@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -390,8 +391,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							m.appendSystemMsg("Nickname changed to " + arg)
 						}
 					case "/clear":
-						m.messages = []db.Message{}
-						m.updateViewportContent()
+						if isAdmin {
+							chID := m.channels[m.activeChan].ID
+							_ = m.database.ClearChannelMessages(chID)
+							m.broker.Broadcast(chID, db.Message{ID: "CMD_CLEAR", ChannelID: chID})
+						} else {
+							m.messages = []db.Message{}
+							m.updateViewportContent()
+						}
 					case "/help":
 						border := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render
 						title := lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render
@@ -403,6 +410,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						if isAdmin || isOwner {
 							help += border("├── ") + title("ADMIN") + border(" ───────────────────────────────────┤") + "\n"
 							help += border("│ ") + cmd("/kick /ban /unban <name>") + "  moderation" + "\n"
+							help += border("│ ") + cmd("/clear") + "         clear chat for all" + "\n"
+							help += border("│ ") + cmd("/del [count]") + "   delete last N messages" + "\n"
 							help += border("│ ") + cmd("/topic <text>") + "          set channel topic" + "\n"
 						}
 						if isOwner {
@@ -562,6 +571,22 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						} else {
 							m.appendSystemMsg("Owner privileges required.")
 						}
+					case "/del":
+						if isAdmin {
+							count := 1
+							if arg != "" {
+								if c, err := strconv.Atoi(arg); err == nil && c > 0 {
+									count = c
+								}
+							}
+							chID := m.channels[m.activeChan].ID
+							for i := 0; i < count; i++ {
+								_ = m.database.DeleteLastMessage(chID)
+							}
+							m.broker.Broadcast(chID, db.Message{ID: "CMD_DEL_LAST", ChannelID: chID, Content: strconv.Itoa(count)})
+						} else {
+							m.appendSystemMsg("Admin privileges required.")
+						}
 					case "/topic":
 						if isAdmin {
 							if arg == "" {
@@ -570,6 +595,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 								ch := m.channels[m.activeChan]
 								m.database.SetChannelTopic(ch.ID, arg)
 								m.channels[m.activeChan].Topic = arg
+								m.broker.Broadcast(ch.ID, db.Message{ID: "CMD_TOPIC", ChannelID: ch.ID, Content: arg})
 								m.appendSystemMsg("Topic updated.")
 							}
 						} else {
@@ -641,6 +667,37 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case newMsgMsg:
 		if msg.ID == "CMD_KICK" {
 			return m, tea.Quit
+		}
+		if msg.ID == "CMD_DEL_LAST" {
+			count, _ := strconv.Atoi(msg.Content)
+			if count <= 0 {
+				count = 1
+			}
+			for i := 0; i < count; i++ {
+				if len(m.messages) > 0 {
+					m.messages = m.messages[:len(m.messages)-1]
+				}
+			}
+			m.updateViewportContent()
+			cmds = append(cmds, m.waitForMessages())
+			return m, tea.Batch(cmds...)
+		}
+		if msg.ID == "CMD_CLEAR" {
+			m.messages = []db.Message{}
+			m.updateViewportContent()
+			cmds = append(cmds, m.waitForMessages())
+			return m, tea.Batch(cmds...)
+		}
+		if msg.ID == "CMD_TOPIC" {
+			for i, c := range m.channels {
+				if c.ID == msg.ChannelID {
+					m.channels[i].Topic = msg.Content
+					break
+				}
+			}
+			m.updateViewportContent()
+			cmds = append(cmds, m.waitForMessages())
+			return m, tea.Batch(cmds...)
 		}
 		newMsg := db.Message(msg)
 		m.messages = append(m.messages, newMsg)
