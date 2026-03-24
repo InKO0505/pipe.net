@@ -464,6 +464,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.input.Reset()
 			}
+			return m, tea.Batch(cmds...)
 
 		case tea.KeyTab:
 			if m.appState == mainState {
@@ -514,7 +515,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.updateViewportContent()
-		return m, m.waitForMessages()
+		cmds = append(cmds, m.waitForMessages())
+		return m, tea.Batch(cmds...)
 
 	case imageFetchedMsg:
 		m.updateViewportContent()
