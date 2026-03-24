@@ -430,10 +430,26 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							help += border("│ ") + cmd("/delchan <name>") + "       delete channel" + "\n"
 							help += border("│ ") + cmd("/setowner <name>") + "      transfer ownership" + "\n"
 						}
-						help += border("├── ") + title("KEYS") + border(" ─────────────────────────────────────┤") + "\n"
+						help += border("├── ") + title("KEYS & FORMATTING") + border(" ───────────────────────────────┤") + "\n"
 						help += border("│ ") + cmd("Tab") + " switch-chan  " + cmd("Ctrl+C") + " quit  " + cmd("Ctrl+Y") + " copy" + "\n"
+						help += border("│ ") + "Use " + cmd("```") + " around text for code blocks" + "\n"
 						help += border("└────────────────────────────────────────────────┘")
 						m.appendSystemMsg(help)
+					case "/code":
+						if arg == "" {
+							m.appendSystemMsg("Usage: /code <text>")
+						} else {
+							msg := db.Message{
+								Username:  m.user.Username,
+								UserColor: m.user.Color,
+								UserRole:  m.user.Role,
+								Content:   "```\n" + arg + "\n```",
+								ChannelID: m.channels[m.activeChan].ID,
+								CreatedAt: time.Now(),
+							}
+							m.broker.Broadcast(msg.ChannelID, msg)
+							m.input.Reset()
+						}
 					case "/op":
 						if isOwner {
 							if arg == "" {
