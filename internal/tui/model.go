@@ -409,6 +409,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							help += border("├── ") + title("OWNER") + border(" ───────────────────────────────────┤") + "\n"
 							help += border("│ ") + cmd("/op /deop <name>") + "        manage admins" + "\n"
 							help += border("│ ") + cmd("/newchan <name>") + "       create channel" + "\n"
+							help += border("│ ") + cmd("/delchan <name>") + "       delete channel" + "\n"
 							help += border("│ ") + cmd("/setowner <name>") + "      transfer ownership" + "\n"
 						}
 						help += border("├── ") + title("KEYS") + border(" ─────────────────────────────────────┤") + "\n"
@@ -508,6 +509,54 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 								} else {
 									m.channels = m.database.GetChannels()
 									m.appendSystemMsg("Channel #" + strings.TrimPrefix(arg, "#") + " created!")
+								}
+							}
+						} else {
+							m.appendSystemMsg("Owner privileges required.")
+						}
+					case "/delchan":
+						if isOwner {
+							if arg == "" {
+								m.appendSystemMsg("Usage: /delchan <name>")
+							} else {
+								targetChan, err := m.database.GetChannelByName(arg)
+								if err == nil {
+									if len(m.channels) <= 1 {
+										m.appendSystemMsg("Cannot delete the last remaining channel.")
+									} else {
+										isDeletingActive := m.channels[m.activeChan].ID == targetChan.ID
+										oldID := m.channels[m.activeChan].ID
+
+										err := m.database.DeleteChannel(targetChan.ID)
+										if err != nil {
+											m.appendSystemMsg("Error deleting channel: " + err.Error())
+										} else {
+											m.appendSystemMsg("Channel " + arg + " deleted.")
+											m.channels = m.database.GetChannels()
+
+											if isDeletingActive {
+												if m.isSubbed && m.msgSub != nil {
+													m.broker.Unsubscribe(targetChan.ID, m.msgSub)
+													m.isSubbed = false
+												}
+												m.activeChan = 0
+												m.loadChannelMessages()
+												m.msgSub = m.broker.Subscribe(m.channels[m.activeChan].ID, m.user)
+												m.isSubbed = true
+												cmds = append(cmds, m.waitForMessages())
+											} else {
+												// Find the new index of our old channel
+												for i, c := range m.channels {
+													if c.ID == oldID {
+														m.activeChan = i
+														break
+													}
+												}
+											}
+										}
+									}
+								} else {
+									m.appendSystemMsg("Channel not found.")
 								}
 							}
 						} else {

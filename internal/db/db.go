@@ -272,3 +272,33 @@ func (db *DB) CreateMessage(channelID, userID, content string) Message {
 	_ = row.Scan(&m.Username, &m.UserColor, &m.UserRole)
 	return m
 }
+func (db *DB) GetChannelByName(name string) (*Channel, error) {
+	name = "#" + strings.TrimPrefix(name, "#")
+	row := db.QueryRow("SELECT id, name, topic, created_at FROM channels WHERE name = ?", name)
+	var c Channel
+	err := row.Scan(&c.ID, &c.Name, &c.Topic, &c.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+func (db *DB) DeleteChannel(id string) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec("DELETE FROM messages WHERE channel_id = ?", id)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec("DELETE FROM channels WHERE id = ?", id)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
