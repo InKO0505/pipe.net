@@ -4,6 +4,10 @@ package tui
 import (
 	"encoding/base64"
 	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"net/http"
 	"os"
@@ -58,14 +62,24 @@ type Model struct {
 
 
 type newMsgMsg db.Message
-type imageFetchedMsg struct{ url, kitty string }
+type imageFetchedMsg struct {
+	url   string
+	kitty string
+	ansi  string // FALLBACK
+}
 
-var globalImageCache sync.Map // url -> kitty sequence ("" = failed)
+type imageAsset struct {
+	kitty string
+	ansi  string
+}
 
-func fetchImageCmd(url string) tea.Cmd {
+var globalImageCache sync.Map // url -> imageAsset ("" = failed)
+
+func fetchImageCmd(url string, targetWidth int) tea.Cmd {
 	return func() tea.Msg {
 		if v, ok := globalImageCache.Load(url); ok {
-			return imageFetchedMsg{url: url, kitty: v.(string)}
+			asset := v.(imageAsset)
+			return imageFetchedMsg{url: url, kitty: asset.kitty, ansi: asset.ansi}
 		}
 
 		var data []byte
@@ -74,30 +88,36 @@ func fetchImageCmd(url string) tea.Cmd {
 		if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
 			resp, httpErr := http.Get(url) //nolint:gosec
 			if httpErr != nil {
-				globalImageCache.Store(url, "")
-				return imageFetchedMsg{url: url, kitty: ""}
+				globalImageCache.Store(url, imageAsset{})
+				return imageFetchedMsg{url: url}
 			}
 			defer resp.Body.Close()
 			data, err = io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10 MB limit
 		} else {
-			// Try local file
 			f, openErr := os.Open(url)
 			if openErr != nil {
-				globalImageCache.Store(url, "")
-				return imageFetchedMsg{url: url, kitty: ""}
+				globalImageCache.Store(url, imageAsset{})
+				return imageFetchedMsg{url: url}
 			}
 			defer f.Close()
 			data, err = io.ReadAll(io.LimitReader(f, 10<<20)) // 10 MB limit
 		}
 
 		if err != nil {
-			globalImageCache.Store(url, "")
-			return imageFetchedMsg{url: url, kitty: ""}
+			globalImageCache.Store(url, imageAsset{})
+			return imageFetchedMsg{url: url}
+		}
+
+		// Decode image for ANSI fallback
+		img, _, decodeErr := image.Decode(strings.NewReader(string(data)))
+		ansi := ""
+		if decodeErr == nil {
+			ansi = renderHalfBlocks(img, targetWidth)
 		}
 
 		kitty := encodeKittyImage(data)
-		globalImageCache.Store(url, kitty)
-		return imageFetchedMsg{url: url, kitty: kitty}
+		globalImageCache.Store(url, imageAsset{kitty: kitty, ansi: ansi})
+		return imageFetchedMsg{url: url, kitty: kitty, ansi: ansi}
 	}
 }
 
@@ -119,6 +139,48 @@ func encodeKittyImage(data []byte) string {
 		} else {
 			sb.WriteString(fmt.Sprintf("\x1b_Gm=%d;%s\x1b\\", m, b64[i:end]))
 		}
+	}
+	return sb.String()
+}
+
+func (m *Model) currentWidth() int {
+	return int(float64(m.width) * 0.6)
+}
+
+func renderHalfBlocks(img image.Image, targetWidth int) string {
+	bounds := img.Bounds()
+	w, h := bounds.Dx(), bounds.Dy()
+	if targetWidth > w {
+		targetWidth = w
+	}
+	if targetWidth < 10 {
+		targetWidth = 10
+	}
+	scale := float64(w) / float64(targetWidth)
+	targetHeight := int(float64(h) / scale)
+	if targetHeight%2 != 0 {
+		targetHeight--
+	}
+
+	var sb strings.Builder
+	for y := 0; y < targetHeight; y += 2 {
+		for x := 0; x < targetWidth; x++ {
+			srcX := int(float64(x) * scale)
+			srcY1 := int(float64(y) * scale)
+			srcY2 := int(float64(y+1) * scale)
+
+			c1 := img.At(bounds.Min.X+srcX, bounds.Min.Y+srcY1)
+			c2 := img.At(bounds.Min.X+srcX, bounds.Min.Y+srcY2)
+
+			r1, g1, b1, _ := c1.RGBA()
+			r2, g2, b2, _ := c2.RGBA()
+
+			fg := lipgloss.Color(fmt.Sprintf("#%02x%02x%02x", r1>>8, g1>>8, b1>>8))
+			bg := lipgloss.Color(fmt.Sprintf("#%02x%02x%02x", r2>>8, g2>>8, b2>>8))
+
+			sb.WriteString(lipgloss.NewStyle().Foreground(fg).Background(bg).Render("▀"))
+		}
+		sb.WriteString("\n")
 	}
 	return sb.String()
 }
@@ -176,6 +238,13 @@ func NewModel(database *db.DB, broker *pubsub.Broker, user *db.User, s ssh.Sessi
 	}
 
 	return m
+}
+
+func (m *Model) Init() tea.Cmd {
+	return tea.Batch(
+		textarea.Blink,
+		m.waitForMessages(),
+	)
 }
 
 func (m *Model) appendSystemMsg(text string) {
@@ -237,11 +306,16 @@ func (m *Model) updateViewportContent() {
 		if strings.HasPrefix(content, "🖼️ ") {
 			url := strings.TrimPrefix(content, "🖼️ ")
 			if v, ok := globalImageCache.Load(url); ok {
-				kitty := v.(string)
-				if kitty == "" {
+				asset := v.(imageAsset)
+				if asset.kitty == "" && asset.ansi == "" {
 					b.WriteString(fmt.Sprintf("[%s] %s: ❌ Image failed to load (%s)\n", timeStr, userStr, url))
 				} else {
-					b.WriteString(fmt.Sprintf("[%s] %s: 🖼️\n%s\n", timeStr, userStr, kitty))
+					// Render Kitty if available, otherwise ANSI
+					imgStr := asset.kitty
+					if imgStr == "" {
+						imgStr = asset.ansi
+					}
+					b.WriteString(fmt.Sprintf("[%s] %s: 🖼️\n%s\n", timeStr, userStr, imgStr))
 				}
 			} else {
 				b.WriteString(fmt.Sprintf("[%s] %s: ⏳ Loading image...\n", timeStr, userStr))
@@ -257,13 +331,6 @@ func (m *Model) updateViewportContent() {
 	}
 	m.viewport.SetContent(b.String())
 	m.viewport.GotoBottom()
-}
-
-func (m *Model) Init() tea.Cmd {
-	return tea.Batch(
-		textarea.Blink,
-		m.waitForMessages(),
-	)
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -465,7 +532,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							m.broker.Broadcast(chID, newMsg)
 							// Pre-fetch image in background
 							if _, ok := globalImageCache.Load(arg); !ok {
-								cmds = append(cmds, fetchImageCmd(arg))
+								cmds = append(cmds, fetchImageCmd(arg, m.currentWidth()))
 							}
 						}
 						handled = true
@@ -529,7 +596,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if strings.HasPrefix(newMsg.Content, "🖼️ ") {
 			url := strings.TrimPrefix(newMsg.Content, "🖼️ ")
 			if _, ok := globalImageCache.Load(url); !ok {
-				cmds = append(cmds, fetchImageCmd(url))
+				cmds = append(cmds, fetchImageCmd(url, m.currentWidth()))
 			}
 		}
 		m.updateViewportContent()
