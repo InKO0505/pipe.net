@@ -64,9 +64,10 @@ type Model struct {
 
 type newMsgMsg db.Message
 type imageFetchedMsg struct {
-	url   string
-	kitty string
-	ansi  string // FALLBACK
+	url    string
+	kitty  string
+	ansi   string // FALLBACK
+	status string // DEBUG
 }
 
 type imageAsset struct {
@@ -118,7 +119,8 @@ func fetchImageCmd(url string, targetWidth int) tea.Cmd {
 
 		kitty := encodeKittyImage(data)
 		globalImageCache.Store(url, imageAsset{kitty: kitty, ansi: ansi})
-		return imageFetchedMsg{url: url, kitty: kitty, ansi: ansi}
+		status := fmt.Sprintf("Image loaded. Kitty size: %d, ANSI size: %d", len(kitty), len(ansi))
+		return imageFetchedMsg{url: url, kitty: kitty, ansi: ansi, status: status}
 	}
 }
 
@@ -311,10 +313,10 @@ func (m *Model) updateViewportContent() {
 				if asset.kitty == "" && asset.ansi == "" {
 					b.WriteString(fmt.Sprintf("[%s] %s: ❌ Image failed to load (%s)\n", timeStr, userStr, url))
 				} else {
-					// Render Kitty if available, otherwise ANSI
-					imgStr := asset.kitty
+					// Prefer ANSI for universal support as requested
+					imgStr := asset.ansi
 					if imgStr == "" {
-						imgStr = asset.ansi
+						imgStr = asset.kitty
 					}
 					b.WriteString(fmt.Sprintf("[%s] %s: 🖼️\n%s\n", timeStr, userStr, imgStr))
 				}
@@ -605,6 +607,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case imageFetchedMsg:
+		if msg.status != "" {
+			m.appendSystemMsg(msg.status)
+		}
 		m.updateViewportContent()
 		return m, nil
 	}
