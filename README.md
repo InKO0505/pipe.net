@@ -21,7 +21,16 @@
 - Работает в **Kitty, WezTerm, Ghostty** и др.
 - Фоновая загрузка не блокирует интерфейс.
 
-### 👑 3. Иерархия Ролей
+### 🔒 3. Приватные каналы и поиск
+- Используйте `/newchan private <name>` для приватного канала владельца.
+- `/invite <user>` и `/remove <user>` управляют доступом в приватный канал.
+- `/dm <user>` открывает личный диалог.
+- `/reply <id> <text>` создаёт ответ на конкретное сообщение.
+- `/search <term>` быстро ищет последние совпадения в текущем канале.
+- `/older` догружает старую историю.
+- `@username` подсвечивается и учитывается в unread.
+
+### 👑 4. Иерархия Ролей
 - **Владелец (`owner`) 👑:** Полный доступ, создание каналов, управление админами.
 - **Администратор (`admin`) ★:** Модерация (кик/бан) и управление темами.
 - **Пользователь (`user`):** Базовое общение и смена внешнего вида.
@@ -43,10 +52,22 @@
 - `/nick <name>` — Сменить никнейм.
 - `/color <name/hex>` — Сменить цвет ника (палитра в Профиле).
 - `/img <url>` — Отправить картинку/GIF.
+- `/reply <id> <text>` — Ответить на сообщение по короткому ID.
+- `/search <term>` — Поиск по сообщениям текущего канала.
+- `/older` — Подгрузить старые сообщения.
+- `/edit <id> <text>` — Редактировать своё сообщение.
+- `/rm <id>` — Удалить своё сообщение.
+- `/mentions` — Последние упоминания вас.
+- `/members` / `/whois <user>` — Состав канала и last seen.
+- `/dm <user>` — Открыть личный диалог.
+- `/invite <user>` / `/remove <user>` — Доступ в приватный канал.
+- `/modlog [n]` — Журнал модерации.
+- `/export [current|all]` — Экспорт истории.
+- `/backup` — SQLite backup в папку `backups/`.
 - `/clear` — Очистить чат.
 - `/topic <text>` (Admin+) — Тема канала.
 - `/kick /ban /unban <user>` (Admin+) — Модерация.
-- `/newchan <name>` (Owner) — Новый канал.
+- `/newchan [private] <name>` (Owner) — Новый канал.
 - `/op /deop <user>` (Owner) — Управление админами.
 - `/setowner <user>` (Owner) — Передать права владельца.
 
@@ -60,6 +81,14 @@ go build -o clinet ./cmd/clinet
 sudo systemctl restart clinet
 ```
 
+Переменные окружения:
+- `CLINET_DB_PATH`
+- `CLINET_PORT`
+- `CLINET_API_PORT`
+- `CLINET_HOST_KEY_PATH`
+- `CLINET_EXPORT_DIR`
+- `CLINET_BACKUP_DIR`
+
 ### 2. Клиент
 ```bash
 ./clinet-connect
@@ -71,6 +100,15 @@ sudo systemctl restart clinet
 - **Go** (Wish, Bubble Tea, Lip Gloss, Glamour).
 - **Kitty Graphics Protocol** для графики.
 - **SQLite** для хранения данных.
+
+## 📱 Android Client
+- Нативный Android-скелет лежит в `android-client/`.
+- Это отдельный Gradle/Compose-проект с реальным mobile API клиентом, а не терминальной обёрткой.
+- Сервер теперь поднимает mobile API на `CLINET_API_PORT` (по умолчанию `8080`).
+- Android-клиент ходит в `/api/mobile/*` и логинится по существующему username сервера.
+- Уже есть мобильные сценарии для чатов, mentions, DM, reply/edit/delete, members и modlog.
+- Для Android Emulator используйте endpoint `http://10.0.2.2:8080`.
+- Для CI-сборки debug APK добавлен workflow `.github/workflows/android-debug-apk.yml`.
 
 ---
 

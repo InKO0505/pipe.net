@@ -21,61 +21,72 @@ func NewBroker() *Broker {
 
 func (b *Broker) Subscribe(channelID string, user *db.User) chan db.Message {
 	b.mu.Lock()
-	defer b.mu.Unlock()
-
 	if b.subscribers[channelID] == nil {
 		b.subscribers[channelID] = make(map[chan db.Message]*db.User)
 	}
 
 	ch := make(chan db.Message, 100)
 	b.subscribers[channelID][ch] = user
+	shouldAnnounce := user != nil && user.Username != "" && len(b.subscribers[channelID]) > 1
+	b.mu.Unlock()
 
-	go b.Broadcast(channelID, db.Message{
-		ID:        "",
-		ChannelID: channelID,
-		UserID:    "system",
-		Content:   user.Username + " joined the channel",
-		CreatedAt: time.Now(),
-		Username:  "Server",
-		UserColor: "#808080",
-	})
+	if shouldAnnounce {
+		go b.broadcastExcept(channelID, ch, db.Message{
+			ChannelID: channelID,
+			UserID:    "system",
+			Content:   user.Username + " joined the channel",
+			CreatedAt: time.Now(),
+			Username:  "Server",
+			UserColor: "#808080",
+		})
+	}
 	return ch
 }
 
 func (b *Broker) Unsubscribe(channelID string, ch chan db.Message) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
-
+	var (
+		user           *db.User
+		shouldAnnounce bool
+	)
 	if subs, ok := b.subscribers[channelID]; ok {
-		if user, exists := subs[ch]; exists { // Retrieve user before deleting
+		if existingUser, exists := subs[ch]; exists {
+			user = existingUser
 			delete(subs, ch)
 			close(ch)
-
-			// Broadcast "left" message asynchronously
-			if user != nil {
-				go b.Broadcast(channelID, db.Message{
-					ID:        "",
-					ChannelID: channelID,
-					UserID:    "system",
-					Content:   user.Username + " left the channel",
-					CreatedAt: time.Now(),
-					Username:  "Server",
-					UserColor: "#808080",
-				})
-			}
+			shouldAnnounce = user != nil && user.Username != "" && len(subs) > 0
 		}
 		if len(subs) == 0 {
 			delete(b.subscribers, channelID)
 		}
 	}
+	b.mu.Unlock()
+
+	if shouldAnnounce {
+		go b.Broadcast(channelID, db.Message{
+			ChannelID: channelID,
+			UserID:    "system",
+			Content:   user.Username + " left the channel",
+			CreatedAt: time.Now(),
+			Username:  "Server",
+			UserColor: "#808080",
+		})
+	}
 }
 
 func (b *Broker) Broadcast(channelID string, msg db.Message) {
+	b.broadcastExcept(channelID, nil, msg)
+}
+
+func (b *Broker) broadcastExcept(channelID string, exclude chan db.Message, msg db.Message) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
 	if subs, ok := b.subscribers[channelID]; ok {
 		for ch := range subs {
+			if exclude != nil && ch == exclude {
+				continue
+			}
 			select {
 			case ch <- msg:
 			default:
@@ -127,4 +138,23 @@ func (b *Broker) KickUser(username string) bool {
 		}
 	}
 	return kicked
+}
+
+func (b *Broker) NotifyUser(username string, msg db.Message) bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	notified := false
+	for _, subs := range b.subscribers {
+		for ch, u := range subs {
+			if u != nil && u.Username == username {
+				select {
+				case ch <- msg:
+				default:
+				}
+				notified = true
+			}
+		}
+	}
+	return notified
 }

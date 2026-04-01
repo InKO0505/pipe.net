@@ -56,3 +56,66 @@ func TestBroadcastOnlyReachesActiveSubscribers(t *testing.T) {
 		t.Fatal("timed out waiting for inactive subscriber closure")
 	}
 }
+
+func TestSubscribeAnnouncesJoinToOtherSubscribersOnly(t *testing.T) {
+	t.Parallel()
+
+	broker := NewBroker()
+	first := broker.Subscribe("general", &db.User{ID: "first", Username: "alice"})
+	second := broker.Subscribe("general", &db.User{ID: "second", Username: "bob"})
+	defer broker.Unsubscribe("general", second)
+	defer broker.Unsubscribe("general", first)
+
+	select {
+	case msg := <-first:
+		if msg.Content != "bob joined the channel" {
+			t.Fatalf("join message = %q, want %q", msg.Content, "bob joined the channel")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for join announcement")
+	}
+
+	select {
+	case msg := <-second:
+		t.Fatalf("new subscriber unexpectedly received its own join announcement: %#v", msg)
+	case <-time.After(150 * time.Millisecond):
+	}
+}
+
+func TestNotifyUserTargetsMatchingSubscriber(t *testing.T) {
+	t.Parallel()
+
+	broker := NewBroker()
+	alice := broker.Subscribe("general", &db.User{ID: "1", Username: "alice"})
+	bob := broker.Subscribe("general", &db.User{ID: "2", Username: "bob"})
+	defer broker.Unsubscribe("general", alice)
+	defer broker.Unsubscribe("general", bob)
+
+	select {
+	case msg := <-alice:
+		if msg.Content != "bob joined the channel" {
+			t.Fatalf("alice join message = %q, want %q", msg.Content, "bob joined the channel")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out draining alice join announcement")
+	}
+
+	if !broker.NotifyUser("bob", db.Message{ID: "CMD_CHANNELS", Content: "refresh"}) {
+		t.Fatal("NotifyUser() = false, want true")
+	}
+
+	select {
+	case msg := <-bob:
+		if msg.ID != "CMD_CHANNELS" {
+			t.Fatalf("bob message ID = %q, want %q", msg.ID, "CMD_CHANNELS")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for bob notification")
+	}
+
+	select {
+	case msg := <-alice:
+		t.Fatalf("alice unexpectedly received notification: %#v", msg)
+	case <-time.After(150 * time.Millisecond):
+	}
+}
