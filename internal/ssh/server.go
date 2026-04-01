@@ -22,12 +22,27 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 )
 
-func Start(database *db.DB, broker *pubsub.Broker, port int) {
+type Config struct {
+	Port        int
+	HostKeyPath string
+}
+
+func Start(database *db.DB, broker *pubsub.Broker, cfg Config) {
+	if cfg.Port == 0 {
+		cfg.Port = 2222
+	}
+	if cfg.HostKeyPath == "" {
+		cfg.HostKeyPath = ".ssh/term_info_ed25519"
+	}
+
 	s, err := wish.NewServer(
-		wish.WithAddress(fmt.Sprintf(":%d", port)),
-		wish.WithHostKeyPath(".ssh/term_info_ed25519"),
+		wish.WithAddress(fmt.Sprintf(":%d", cfg.Port)),
+		wish.WithHostKeyPath(cfg.HostKeyPath),
 		// Intercept the public key and pass it into the context
 		wish.WithPublicKeyAuth(func(ctx ssh.Context, key ssh.PublicKey) bool {
+			if key == nil {
+				return false
+			}
 			ctx.SetValue("pubkey", key)
 			return true
 		}),
@@ -56,7 +71,7 @@ func Start(database *db.DB, broker *pubsub.Broker, port int) {
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
-	log.Printf("Starting SSH server on port :%d", port)
+	log.Printf("Starting SSH server on port :%d", cfg.Port)
 	go func() {
 		if err := s.ListenAndServe(); err != nil {
 			log.Fatalf("Server error: %s", err)
