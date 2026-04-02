@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,7 +39,6 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -545,7 +543,7 @@ private fun ChannelComposerCard(
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             TextButton(
                 onClick = onTogglePrivacy,
-                colors = TextButtonDefaults.textButtonColors(
+                colors = ButtonDefaults.textButtonColors(
                     contentColor = PipePalette.TextPrimary,
                     containerColor = PipePalette.PanelSoft,
                 ),
@@ -1106,7 +1104,7 @@ private fun MemberSheet(
             }
             TextButton(
                 onClick = onRemoveMember,
-                colors = TextButtonDefaults.textButtonColors(
+                colors = ButtonDefaults.textButtonColors(
                     contentColor = PipePalette.Danger,
                     containerColor = PipePalette.SoftDanger,
                 ),
@@ -1300,7 +1298,7 @@ private fun SmallActionButton(
 ) {
     TextButton(
         onClick = onClick,
-        colors = TextButtonDefaults.textButtonColors(
+        colors = ButtonDefaults.textButtonColors(
             contentColor = if (accent) PipePalette.TextPrimary else PipePalette.TextSecondary,
             containerColor = if (accent) PipePalette.AccentBlue.copy(alpha = 0.22f) else PipePalette.PanelRaised,
         ),
@@ -1346,7 +1344,7 @@ private fun SmallTextPill(
 ) {
     TextButton(
         onClick = onClick,
-        colors = TextButtonDefaults.textButtonColors(
+        colors = ButtonDefaults.textButtonColors(
             contentColor = if (destructive) PipePalette.Danger else PipePalette.TextPrimary,
             containerColor = if (destructive) PipePalette.SoftDanger else PipePalette.PanelSoft,
         ),
