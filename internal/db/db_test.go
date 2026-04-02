@@ -113,6 +113,40 @@ func TestCreateMessageSanitizesReplyMetadata(t *testing.T) {
 	}
 }
 
+func TestCreateMobileUserCreatesAndReusesUsername(t *testing.T) {
+	t.Parallel()
+
+	database, err := InitDB(filepath.Join(t.TempDir(), "clinet.db"))
+	if err != nil {
+		t.Fatalf("InitDB() error = %v", err)
+	}
+	defer database.Close()
+
+	user, err := database.CreateMobileUser("inko_mobile")
+	if err != nil {
+		t.Fatalf("CreateMobileUser() error = %v", err)
+	}
+	if user.Username != "inko_mobile" {
+		t.Fatalf("username = %q, want %q", user.Username, "inko_mobile")
+	}
+	if user.SSHPubKey == "" || user.SSHPubKey[:7] != "mobile:" {
+		t.Fatalf("ssh pub key = %q, want mobile sentinel", user.SSHPubKey)
+	}
+
+	same, err := database.CreateMobileUser("inko_mobile")
+	if err != nil {
+		t.Fatalf("CreateMobileUser(existing) error = %v", err)
+	}
+	if same.ID != user.ID {
+		t.Fatalf("existing user ID = %q, want %q", same.ID, user.ID)
+	}
+
+	_, err = database.CreateMobileUser("x")
+	if !errors.Is(err, ErrInvalidUsername) {
+		t.Fatalf("CreateMobileUser(invalid) error = %v, want %v", err, ErrInvalidUsername)
+	}
+}
+
 func TestGetOrCreateDirectChannelReturnsStableChannel(t *testing.T) {
 	t.Parallel()
 

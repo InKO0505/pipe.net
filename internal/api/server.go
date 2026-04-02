@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -206,11 +205,18 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	user, err := s.db.GetUserByUsername(req.Username)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusUnauthorized, "unknown username")
+		user, err = s.db.CreateMobileUser(req.Username)
+		if errors.Is(err, db.ErrInvalidUsername) {
+			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		writeError(w, http.StatusInternalServerError, err.Error())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+	if user == nil {
+		writeError(w, http.StatusInternalServerError, "user creation failed")
 		return
 	}
 	if user.IsBanned {
