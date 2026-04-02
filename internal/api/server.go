@@ -23,6 +23,16 @@ type Server struct {
 	db         *db.DB
 }
 
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(status int) {
+	r.status = status
+	r.ResponseWriter.WriteHeader(status)
+}
+
 func Start(database *db.DB, cfg Config) *Server {
 	if cfg.Port == 0 {
 		cfg.Port = 8080
@@ -30,6 +40,7 @@ func Start(database *db.DB, cfg Config) *Server {
 
 	s := &Server{db: database}
 	mux := http.NewServeMux()
+	mux.HandleFunc("/api/mobile/health", s.handleHealth)
 	mux.HandleFunc("/api/mobile/login", s.handleLogin)
 	mux.HandleFunc("/api/mobile/me", s.withAuth(s.handleMe))
 	mux.HandleFunc("/api/mobile/channels", s.withAuth(s.handleChannels))
@@ -42,7 +53,7 @@ func Start(database *db.DB, cfg Config) *Server {
 
 	s.httpServer = &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Port),
-		Handler:           withJSONHeaders(mux),
+		Handler:           withAccessLog(withJSONHeaders(mux)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -61,6 +72,25 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		return nil
 	}
 	return s.httpServer.Shutdown(ctx)
+}
+
+func withAccessLog(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		startedAt := time.Now()
+		recorder := &statusRecorder{
+			ResponseWriter: w,
+			status:         http.StatusOK,
+		}
+		next.ServeHTTP(recorder, r)
+		log.Printf(
+			"Mobile API %s %s from %s -> %d (%s)",
+			r.Method,
+			r.URL.Path,
+			r.RemoteAddr,
+			recorder.status,
+			time.Since(startedAt).Round(time.Millisecond),
+		)
+	})
 }
 
 func withJSONHeaders(next http.Handler) http.Handler {
@@ -189,6 +219,18 @@ func toMessagePayload(message db.Message) messagePayload {
 		payload.EditedAt = message.EditedAt.Format(time.RFC3339)
 	}
 	return payload
+}
+
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status": "ok",
+		"time":   time.Now().Format(time.RFC3339),
+	})
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {

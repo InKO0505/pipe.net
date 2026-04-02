@@ -1,5 +1,7 @@
 package net.pipe.mobile.data
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
@@ -226,42 +228,44 @@ class MobileApiRepository : ChatRepository {
         return response.getJSONObject("message").toMessageItem()
     }
 
-    private fun request(
+    private suspend fun request(
         endpoint: String,
         path: String,
         method: String,
         token: String? = null,
         body: String? = null,
     ): JSONObject {
-        val base = endpoint.trim().removeSuffix("/")
-        val url = URL(base + path)
-        val connection = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = method
-            connectTimeout = 10_000
-            readTimeout = 10_000
-            setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            setRequestProperty("Accept", "application/json")
-            if (!token.isNullOrBlank()) {
-                setRequestProperty("Authorization", "Bearer $token")
+        return withContext(Dispatchers.IO) {
+            val base = endpoint.trim().removeSuffix("/")
+            val url = URL(base + path)
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = method
+                connectTimeout = 10_000
+                readTimeout = 10_000
+                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                setRequestProperty("Accept", "application/json")
+                if (!token.isNullOrBlank()) {
+                    setRequestProperty("Authorization", "Bearer $token")
+                }
+                doInput = true
+                if (body != null) {
+                    doOutput = true
+                }
             }
-            doInput = true
+
             if (body != null) {
-                doOutput = true
+                OutputStreamWriter(connection.outputStream).use { it.write(body) }
             }
-        }
 
-        if (body != null) {
-            OutputStreamWriter(connection.outputStream).use { it.write(body) }
+            val responseCode = connection.responseCode
+            val stream = if (responseCode in 200..299) connection.inputStream else connection.errorStream
+            val text = stream?.bufferedReader()?.use(BufferedReader::readText).orEmpty()
+            if (responseCode !in 200..299) {
+                val message = runCatching { JSONObject(text).optString("error") }.getOrNull().orEmpty()
+                throw IllegalStateException(message.ifBlank { "HTTP $responseCode" })
+            }
+            JSONObject(text)
         }
-
-        val responseCode = connection.responseCode
-        val stream = if (responseCode in 200..299) connection.inputStream else connection.errorStream
-        val text = stream?.bufferedReader()?.use(BufferedReader::readText).orEmpty()
-        if (responseCode !in 200..299) {
-            val message = runCatching { JSONObject(text).optString("error") }.getOrNull().orEmpty()
-            throw IllegalStateException(message.ifBlank { "HTTP $responseCode" })
-        }
-        return JSONObject(text)
     }
 }
 
