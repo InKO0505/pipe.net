@@ -265,6 +265,10 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "user is banned")
 		return
 	}
+	if err := s.db.EnsurePublicChannelMemberships(user.ID); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	session, err := s.db.CreateMobileSession(user.ID)
 	if err != nil {

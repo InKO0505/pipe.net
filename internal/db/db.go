@@ -560,9 +560,9 @@ func parseSQLiteTime(value any) (time.Time, error) {
 
 func scanUser(scanner userScanner) (*User, error) {
 	var (
-		user        User
-		createdAt   any
-		lastSeenAt  any
+		user       User
+		createdAt  any
+		lastSeenAt any
 	)
 
 	if err := scanner.Scan(&user.ID, &user.SSHPubKey, &user.Username, &user.IsVerified, &createdAt, &user.Role, &user.Color, &user.IsBanned, &user.Bio, &lastSeenAt); err != nil {
@@ -646,6 +646,9 @@ func (db *DB) CreateUser(pubKey string) *User {
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`, user.ID, user.SSHPubKey, user.Username, normalizeUsername(user.Username), user.IsVerified, user.CreatedAt, user.Role, user.Color, user.IsBanned, user.Bio, user.LastSeenAt)
 		if err == nil {
+			if joinErr := db.EnsurePublicChannelMemberships(user.ID); joinErr != nil {
+				log.Printf("error joining public channels for %q: %v", user.Username, joinErr)
+			}
 			return user
 		}
 
@@ -681,6 +684,21 @@ func (db *DB) CreateUser(pubKey string) *User {
 	}
 	log.Printf("error creating user: exhausted username retries for %q", pubKey)
 	return user
+}
+
+func (db *DB) EnsurePublicChannelMemberships(userID string) error {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil
+	}
+
+	_, err := db.Exec(`
+		INSERT OR IGNORE INTO channel_members (channel_id, user_id, created_at)
+		SELECT id, ?, ?
+		FROM channels
+		WHERE is_private = 0 AND COALESCE(kind, 'channel') != 'dm'
+	`, userID, time.Now())
+	return err
 }
 
 func (db *DB) CreateMobileUser(username string) (*User, error) {
@@ -723,6 +741,9 @@ func (db *DB) CreateMobileUser(username string) (*User, error) {
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, user.ID, user.SSHPubKey, user.Username, normalizeUsername(user.Username), user.IsVerified, user.CreatedAt, user.Role, user.Color, user.IsBanned, user.Bio, user.LastSeenAt)
 	if err == nil {
+		if err := db.EnsurePublicChannelMemberships(user.ID); err != nil {
+			return nil, err
+		}
 		return user, nil
 	}
 
