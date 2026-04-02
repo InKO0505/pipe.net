@@ -24,6 +24,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -135,6 +136,7 @@ private fun ConnectScreen(
                 label = { Text("Server address") },
                 placeholder = { Text("http://10.0.2.2:8080") },
                 singleLine = true,
+                colors = pipeTextFieldColors(),
             )
             Spacer(modifier = Modifier.height(12.dp))
             OutlinedTextField(
@@ -144,6 +146,7 @@ private fun ConnectScreen(
                 label = { Text("Login") },
                 placeholder = { Text("inko") },
                 singleLine = true,
+                colors = pipeTextFieldColors(),
             )
             if (state.error != null) {
                 Spacer(modifier = Modifier.height(12.dp))
@@ -171,7 +174,7 @@ private fun ConnectScreen(
             }
             Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = "For Android Emulator use 10.0.2.2 instead of localhost.",
+                text = "Emulator: http://10.0.2.2:8080. Real phone: use http://<LAN-IP>:8080. HTTPS works only if the server has a valid TLS certificate.",
                 color = Color(0xFF667085),
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -316,6 +319,7 @@ private fun ChatScreen(
                 label = { Text(if (state.editingMessageId != null) "Edit message" else "Message") },
                 placeholder = { Text(if (state.editingMessageId != null) "Update the selected message" else "Write something") },
                 shape = RoundedCornerShape(24.dp),
+                colors = pipeTextFieldColors(),
             )
             Spacer(modifier = Modifier.height(10.dp))
             Button(
@@ -447,6 +451,7 @@ private fun ChannelComposerCard(
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Channel name") },
             singleLine = true,
+            colors = pipeTextFieldColors(),
         )
         Spacer(modifier = Modifier.height(8.dp))
         Row(
@@ -497,6 +502,7 @@ private fun QuickActions(
             label = { Text("Find user or open DM") },
             placeholder = { Text("username") },
             singleLine = true,
+            colors = pipeTextFieldColors(),
         )
         Spacer(modifier = Modifier.height(8.dp))
         Row(
@@ -800,6 +806,7 @@ private fun MemberSheet(
             label = { Text("Invite or remove user") },
             placeholder = { Text("username") },
             singleLine = true,
+            colors = pipeTextFieldColors(),
         )
         Spacer(modifier = Modifier.height(8.dp))
         Row(
@@ -906,3 +913,19 @@ private fun Badge(text: String, background: Color) {
         )
     }
 }
+
+@Composable
+private fun pipeTextFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = Color(0xFF101828),
+    unfocusedTextColor = Color(0xFF101828),
+    disabledTextColor = Color(0xFF98A2B3),
+    focusedLabelColor = Color(0xFF7C2D12),
+    unfocusedLabelColor = Color(0xFF475467),
+    focusedPlaceholderColor = Color(0xFF98A2B3),
+    unfocusedPlaceholderColor = Color(0xFF98A2B3),
+    focusedBorderColor = Color(0xFF7C2D12),
+    unfocusedBorderColor = Color(0xFFD0D5DD),
+    cursorColor = Color(0xFF7C2D12),
+    focusedContainerColor = Color.Transparent,
+    unfocusedContainerColor = Color.Transparent,
+)

@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import javax.net.ssl.SSLException
 import net.pipe.mobile.data.ChatRepository
 import net.pipe.mobile.data.ChatSummary
 import net.pipe.mobile.data.MessageItem
@@ -106,7 +107,7 @@ class PipeViewModel(
                 _uiState.value = it
                 startPolling()
             }.onFailure {
-                _uiState.value = _uiState.value.copy(loading = false, error = it.message ?: "Connection failed.")
+                _uiState.value = _uiState.value.copy(loading = false, error = it.toUserMessage())
             }
         }
     }
@@ -136,7 +137,7 @@ class PipeViewModel(
             }.onSuccess {
                 _uiState.value = it
             }.onFailure {
-                _uiState.value = state.copy(loading = false, error = it.message ?: "Refresh failed.")
+                _uiState.value = state.copy(loading = false, error = it.toUserMessage("Refresh failed."))
             }
         }
     }
@@ -161,7 +162,7 @@ class PipeViewModel(
                     composerText = "",
                 )
             }.onFailure {
-                _uiState.value = state.copy(loading = false, error = it.message ?: "Loading messages failed.")
+                _uiState.value = state.copy(loading = false, error = it.toUserMessage("Loading messages failed."))
             }
         }
     }
@@ -232,7 +233,7 @@ class PipeViewModel(
                         error = null,
                     )
                 }.onFailure {
-                    _uiState.value = state.copy(error = it.message ?: "Edit failed.")
+                    _uiState.value = state.copy(error = it.toUserMessage("Edit failed."))
                 }
             } else {
                 runCatching {
@@ -252,7 +253,7 @@ class PipeViewModel(
                         error = null,
                     )
                 }.onFailure {
-                    _uiState.value = state.copy(error = it.message ?: "Send failed.")
+                    _uiState.value = state.copy(error = it.toUserMessage("Send failed."))
                 }
             }
         }
@@ -279,7 +280,7 @@ class PipeViewModel(
                     error = null,
                 )
             }.onFailure {
-                _uiState.value = state.copy(error = it.message ?: "Delete failed.")
+                _uiState.value = state.copy(error = it.toUserMessage("Delete failed."))
             }
         }
     }
@@ -302,7 +303,7 @@ class PipeViewModel(
                     editingMessageId = null,
                 )
             }.onFailure {
-                _uiState.value = state.copy(loading = false, error = it.message ?: "Failed to load mentions.")
+                _uiState.value = state.copy(loading = false, error = it.toUserMessage("Failed to load mentions."))
             }
         }
     }
@@ -333,7 +334,7 @@ class PipeViewModel(
             }.onSuccess { members ->
                 _uiState.value = state.copy(activeSheet = SheetContent.Members, members = members, error = null)
             }.onFailure {
-                _uiState.value = state.copy(error = it.message ?: "Failed to load members.")
+                _uiState.value = state.copy(error = it.toUserMessage("Failed to load members."))
             }
         }
     }
@@ -347,7 +348,7 @@ class PipeViewModel(
             }.onSuccess { logs ->
                 _uiState.value = state.copy(activeSheet = SheetContent.ModLog, modLog = logs, error = null)
             }.onFailure {
-                _uiState.value = state.copy(error = it.message ?: "Failed to load moderation log.")
+                _uiState.value = state.copy(error = it.toUserMessage("Failed to load moderation log."))
             }
         }
     }
@@ -362,7 +363,7 @@ class PipeViewModel(
             }.onSuccess { user ->
                 _uiState.value = state.copy(activeSheet = SheetContent.UserLookup, lookedUpUser = user, error = null)
             }.onFailure {
-                _uiState.value = state.copy(error = it.message ?: "Failed to load user.")
+                _uiState.value = state.copy(error = it.toUserMessage("Failed to load user."))
             }
         }
     }
@@ -384,7 +385,7 @@ class PipeViewModel(
                 )
                 selectChat(chat.id)
             }.onFailure {
-                _uiState.value = state.copy(error = it.message ?: "Failed to create DM.")
+                _uiState.value = state.copy(error = it.toUserMessage("Failed to create DM."))
             }
         }
     }
@@ -406,7 +407,7 @@ class PipeViewModel(
                 )
                 selectChat(chat.id)
             }.onFailure {
-                _uiState.value = state.copy(error = it.message ?: "Channel creation failed.")
+                _uiState.value = state.copy(error = it.toUserMessage("Channel creation failed."))
             }
         }
     }
@@ -446,7 +447,7 @@ class PipeViewModel(
                 )
             }.onFailure {
                 _uiState.value = state.copy(
-                    error = it.message ?: if (add) "Invite failed." else "Remove failed.",
+                    error = it.toUserMessage(if (add) "Invite failed." else "Remove failed."),
                 )
             }
         }
@@ -485,6 +486,17 @@ class PipeViewModel(
         pollJob?.cancel()
         super.onCleared()
     }
+}
+
+private fun Throwable.toUserMessage(fallback: String = "Connection failed."): String {
+    val raw = message?.trim().orEmpty()
+    if (raw.contains("CLEARTEXT communication", ignoreCase = true) && raw.contains("not permitted", ignoreCase = true)) {
+        return "HTTP is blocked by Android network policy for this build. Update the app and retry."
+    }
+    if (this is SSLException || raw.contains("SSL", ignoreCase = true) || raw.contains("Handshake", ignoreCase = true)) {
+        return "HTTPS failed. The server certificate is missing, invalid, self-signed, or issued for a different host."
+    }
+    return raw.ifBlank { fallback }
 }
 
 private fun List<MessageItem>.markMine(username: String): List<MessageItem> {
