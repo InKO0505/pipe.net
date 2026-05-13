@@ -37,6 +37,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import net.pipe.mobile.data.ChatSummary
@@ -60,6 +63,7 @@ fun ChatShell(viewModel: PipeViewModel) {
                 state = state,
                 onEndpointChange = viewModel::updateEndpoint,
                 onUsernameChange = viewModel::updateUsername,
+                onPinChange = viewModel::updatePin,
                 onConnect = viewModel::connect,
             )
         } else {
@@ -97,6 +101,7 @@ private fun ConnectScreen(
     state: PipeUiState,
     onEndpointChange: (String) -> Unit,
     onUsernameChange: (String) -> Unit,
+    onPinChange: (String) -> Unit,
     onConnect: () -> Unit,
 ) {
     Box(
@@ -146,6 +151,18 @@ private fun ConnectScreen(
                 label = { Text("Login") },
                 placeholder = { Text("inko") },
                 singleLine = true,
+                colors = pipeTextFieldColors(),
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedTextField(
+                value = state.pinInput,
+                onValueChange = onPinChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("PIN") },
+                placeholder = { Text("Set with /setpin in SSH client") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 colors = pipeTextFieldColors(),
             )
             if (state.error != null) {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const (
@@ -248,6 +249,7 @@ func initSchema(db *sql.DB) error {
 		{"messages", "reply_to_id", "TEXT DEFAULT ''"},
 		{"messages", "edited_at", "DATETIME DEFAULT NULL"},
 		{"messages", "is_deleted", "BOOLEAN DEFAULT 0"},
+		{"users", "mobile_pin", "TEXT DEFAULT NULL"},
 	}
 
 	for _, migration := range migrations {
@@ -742,6 +744,41 @@ func (db *DB) GetUserByMobileToken(token string) (*User, error) {
 		return nil, err
 	}
 	_, _ = db.Exec("UPDATE mobile_sessions SET last_used_at = ? WHERE token = ?", time.Now(), strings.TrimSpace(token))
+	return &user, nil
+}
+
+var ErrMobilePinNotSet = errors.New("mobile PIN not set — run /setpin in the SSH client first")
+var ErrMobilePinInvalid = errors.New("invalid mobile PIN")
+
+func (db *DB) SetMobilePin(userID, pin string) error {
+	hash, err := bcrypt.GenerateFromPassword([]byte(pin), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec("UPDATE users SET mobile_pin = ? WHERE id = ?", string(hash), userID)
+	return err
+}
+
+func (db *DB) VerifyMobilePin(username, pin string) (*User, error) {
+	row := db.QueryRow(`
+		SELECT id, ssh_pub_key, username, is_verified, created_at, role, color, is_banned,
+		       COALESCE(bio, ''), COALESCE(last_seen_at, created_at), COALESCE(mobile_pin, '')
+		FROM users WHERE username_normalized = ?
+	`, strings.ToLower(strings.TrimSpace(username)))
+
+	var user User
+	var storedHash string
+	if err := row.Scan(&user.ID, &user.SSHPubKey, &user.Username, &user.IsVerified,
+		&user.CreatedAt, &user.Role, &user.Color, &user.IsBanned, &user.Bio,
+		&user.LastSeenAt, &storedHash); err != nil {
+		return nil, err
+	}
+	if storedHash == "" {
+		return nil, ErrMobilePinNotSet
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(pin)); err != nil {
+		return nil, ErrMobilePinInvalid
+	}
 	return &user, nil
 }
 

@@ -16,7 +16,9 @@ import (
 )
 
 type Config struct {
-	Port int
+	Port        int
+	TLSCertFile string
+	TLSKeyFile  string
 }
 
 type Server struct {
@@ -48,9 +50,16 @@ func Start(database *db.DB, cfg Config) *Server {
 	}
 
 	go func() {
-		log.Printf("Starting mobile API on port :%d", cfg.Port)
-		if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("Mobile API error: %v", err)
+		if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" {
+			log.Printf("Starting mobile API (TLS) on port :%d", cfg.Port)
+			if err := s.httpServer.ListenAndServeTLS(cfg.TLSCertFile, cfg.TLSKeyFile); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Printf("Mobile API error: %v", err)
+			}
+		} else {
+			log.Printf("Starting mobile API (plain HTTP) on port :%d — set CLINET_API_TLS_CERT and CLINET_API_TLS_KEY for TLS", cfg.Port)
+			if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Printf("Mobile API error: %v", err)
+			}
 		}
 	}()
 
@@ -109,6 +118,7 @@ func decodeJSON(r *http.Request, target any) error {
 
 type loginRequest struct {
 	Username string `json:"username"`
+	Pin      string `json:"pin"`
 }
 
 type userPayload struct {
@@ -203,11 +213,23 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
+	if strings.TrimSpace(req.Pin) == "" {
+		writeError(w, http.StatusBadRequest, "pin is required")
+		return
+	}
 
-	user, err := s.db.GetUserByUsername(req.Username)
+	user, err := s.db.VerifyMobilePin(req.Username, req.Pin)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			writeError(w, http.StatusUnauthorized, "unknown username")
+			return
+		}
+		if errors.Is(err, db.ErrMobilePinNotSet) {
+			writeError(w, http.StatusUnauthorized, err.Error())
+			return
+		}
+		if errors.Is(err, db.ErrMobilePinInvalid) {
+			writeError(w, http.StatusUnauthorized, "invalid credentials")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, err.Error())

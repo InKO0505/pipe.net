@@ -284,7 +284,7 @@ func NewModel(database *db.DB, broker *pubsub.Broker, user *db.User, s ssh.Sessi
 			"/search", "/older", "/edit", "/rm", "/mentions", "/members", "/whois",
 			"/dm", "/invite", "/remove", "/modlog", "/export", "/backup",
 			"/op", "/deop", "/kick", "/ban", "/unban", "/newchan", "/delchan",
-			"/topic", "/del", "/setowner",
+			"/topic", "/del", "/setowner", "/setpin",
 		},
 	}
 
@@ -674,7 +674,7 @@ func (m *Model) renderHelp(isAdmin, isOwner bool) string {
 	var lines []string
 	lines = append(lines, "Local help")
 	lines = append(lines, "/help /nick /color /bio /img /code /reply /search /older")
-	lines = append(lines, "/edit /rm /mentions /members /whois /dm /export /backup")
+	lines = append(lines, "/edit /rm /mentions /members /whois /dm /export /backup /setpin")
 	if isAdmin || isOwner {
 		lines = append(lines, "Admin: /clear /kick /ban /unban /topic /invite /remove /modlog /del")
 	}
@@ -1042,6 +1042,16 @@ func (m *Model) handleSubmit(content string) []tea.Cmd {
 			return nil
 		}
 		m.appendSystemMsg("Backup saved to " + path)
+	case "/setpin":
+		if len(arg) < 4 {
+			m.appendSystemMsg("Usage: /setpin <pin> (minimum 4 characters)")
+			return nil
+		}
+		if err := m.database.SetMobilePin(m.user.ID, arg); err != nil {
+			m.appendSystemMsg("Failed to set mobile PIN: " + err.Error())
+			return nil
+		}
+		m.appendSystemMsg("Mobile PIN set. Use it to log in from the Android app.")
 	case "/op":
 		if !isOwner {
 			m.appendSystemMsg("Owner privileges required.")
