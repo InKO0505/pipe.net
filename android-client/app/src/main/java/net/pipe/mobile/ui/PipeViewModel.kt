@@ -28,6 +28,7 @@ data class PipeUiState(
     val loading: Boolean = false,
     val endpoint: String = "http://10.0.2.2:8080",
     val usernameInput: String = "",
+    val pinInput: String = "",
     val token: String? = null,
     val profile: ProfileSummary? = null,
     val chats: List<ChatSummary> = emptyList(),
@@ -72,18 +73,27 @@ class PipeViewModel(
         _uiState.value = _uiState.value.copy(usernameInput = value)
     }
 
+    fun updatePin(value: String) {
+        _uiState.value = _uiState.value.copy(pinInput = value)
+    }
+
     fun connect() {
         val endpoint = uiState.value.endpoint.trim()
         val username = uiState.value.usernameInput.trim()
+        val pin = uiState.value.pinInput
         if (endpoint.isBlank() || username.isBlank()) {
             _uiState.value = _uiState.value.copy(error = "Endpoint and username are required.")
+            return
+        }
+        if (pin.isBlank()) {
+            _uiState.value = _uiState.value.copy(error = "PIN is required. Set it with /setpin in the SSH client.")
             return
         }
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(loading = true, error = null)
             runCatching {
-                val session = repository.login(endpoint, username)
+                val session = repository.login(endpoint, username, pin)
                 prefs.saveEndpoint(endpoint)
                 prefs.saveUsername(session.profile.username)
                 val chats = repository.loadChats(endpoint, session.token)

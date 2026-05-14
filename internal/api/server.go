@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,22 +16,14 @@ import (
 )
 
 type Config struct {
-	Port int
+	Port        int
+	TLSCertFile string
+	TLSKeyFile  string
 }
 
 type Server struct {
 	httpServer *http.Server
 	db         *db.DB
-}
-
-type statusRecorder struct {
-	http.ResponseWriter
-	status int
-}
-
-func (r *statusRecorder) WriteHeader(status int) {
-	r.status = status
-	r.ResponseWriter.WriteHeader(status)
 }
 
 func Start(database *db.DB, cfg Config) *Server {
@@ -40,7 +33,6 @@ func Start(database *db.DB, cfg Config) *Server {
 
 	s := &Server{db: database}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/mobile/health", s.handleHealth)
 	mux.HandleFunc("/api/mobile/login", s.handleLogin)
 	mux.HandleFunc("/api/mobile/me", s.withAuth(s.handleMe))
 	mux.HandleFunc("/api/mobile/channels", s.withAuth(s.handleChannels))
@@ -53,14 +45,21 @@ func Start(database *db.DB, cfg Config) *Server {
 
 	s.httpServer = &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Port),
-		Handler:           withAccessLog(withJSONHeaders(mux)),
+		Handler:           withJSONHeaders(mux),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	go func() {
-		log.Printf("Starting mobile API on port :%d", cfg.Port)
-		if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("Mobile API error: %v", err)
+		if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" {
+			log.Printf("Starting mobile API (TLS) on port :%d", cfg.Port)
+			if err := s.httpServer.ListenAndServeTLS(cfg.TLSCertFile, cfg.TLSKeyFile); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Printf("Mobile API error: %v", err)
+			}
+		} else {
+			log.Printf("Starting mobile API (plain HTTP) on port :%d — set CLINET_API_TLS_CERT and CLINET_API_TLS_KEY for TLS", cfg.Port)
+			if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Printf("Mobile API error: %v", err)
+			}
 		}
 	}()
 
@@ -72,25 +71,6 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		return nil
 	}
 	return s.httpServer.Shutdown(ctx)
-}
-
-func withAccessLog(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		startedAt := time.Now()
-		recorder := &statusRecorder{
-			ResponseWriter: w,
-			status:         http.StatusOK,
-		}
-		next.ServeHTTP(recorder, r)
-		log.Printf(
-			"Mobile API %s %s from %s -> %d (%s)",
-			r.Method,
-			r.URL.Path,
-			r.RemoteAddr,
-			recorder.status,
-			time.Since(startedAt).Round(time.Millisecond),
-		)
-	})
 }
 
 func withJSONHeaders(next http.Handler) http.Handler {
@@ -138,6 +118,7 @@ func decodeJSON(r *http.Request, target any) error {
 
 type loginRequest struct {
 	Username string `json:"username"`
+	Pin      string `json:"pin"`
 }
 
 type userPayload struct {
@@ -221,18 +202,6 @@ func toMessagePayload(message db.Message) messagePayload {
 	return payload
 }
 
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"status": "ok",
-		"time":   time.Now().Format(time.RFC3339),
-	})
-}
-
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -244,29 +213,30 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-
-	user, err := s.db.GetUserByUsername(req.Username)
-	if err != nil {
-		user, err = s.db.CreateMobileUser(req.Username)
-		if errors.Is(err, db.ErrInvalidUsername) {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
+	if strings.TrimSpace(req.Pin) == "" {
+		writeError(w, http.StatusBadRequest, "pin is required")
+		return
 	}
-	if user == nil {
-		writeError(w, http.StatusInternalServerError, "user creation failed")
+
+	user, err := s.db.VerifyMobilePin(req.Username, req.Pin)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusUnauthorized, "unknown username")
+			return
+		}
+		if errors.Is(err, db.ErrMobilePinNotSet) {
+			writeError(w, http.StatusUnauthorized, err.Error())
+			return
+		}
+		if errors.Is(err, db.ErrMobilePinInvalid) {
+			writeError(w, http.StatusUnauthorized, "invalid credentials")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if user.IsBanned {
 		writeError(w, http.StatusForbidden, "user is banned")
-		return
-	}
-	if err := s.db.EnsurePublicChannelMemberships(user.ID); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"clinet/internal/db"
+	"clinet/internal/design"
 	"clinet/internal/pubsub"
 
 	"github.com/charmbracelet/bubbles/textarea"
@@ -284,7 +285,7 @@ func NewModel(database *db.DB, broker *pubsub.Broker, user *db.User, s ssh.Sessi
 			"/search", "/older", "/edit", "/rm", "/mentions", "/members", "/whois",
 			"/dm", "/invite", "/remove", "/modlog", "/export", "/backup",
 			"/op", "/deop", "/kick", "/ban", "/unban", "/newchan", "/delchan",
-			"/topic", "/del", "/setowner",
+			"/topic", "/del", "/setowner", "/setpin",
 		},
 	}
 
@@ -674,7 +675,7 @@ func (m *Model) renderHelp(isAdmin, isOwner bool) string {
 	var lines []string
 	lines = append(lines, "Local help")
 	lines = append(lines, "/help /nick /color /bio /img /code /reply /search /older")
-	lines = append(lines, "/edit /rm /mentions /members /whois /dm /export /backup")
+	lines = append(lines, "/edit /rm /mentions /members /whois /dm /export /backup /setpin")
 	if isAdmin || isOwner {
 		lines = append(lines, "Admin: /clear /kick /ban /unban /topic /invite /remove /modlog /del")
 	}
@@ -1042,6 +1043,16 @@ func (m *Model) handleSubmit(content string) []tea.Cmd {
 			return nil
 		}
 		m.appendSystemMsg("Backup saved to " + path)
+	case "/setpin":
+		if len(arg) < 4 {
+			m.appendSystemMsg("Usage: /setpin <pin> (minimum 4 characters)")
+			return nil
+		}
+		if err := m.database.SetMobilePin(m.user.ID, arg); err != nil {
+			m.appendSystemMsg("Failed to set mobile PIN: " + err.Error())
+			return nil
+		}
+		m.appendSystemMsg("Mobile PIN set. Use it to log in from the Android app.")
 	case "/op":
 		if !isOwner {
 			m.appendSystemMsg("Owner privileges required.")
@@ -1232,12 +1243,12 @@ func messageMentionsUser(msg db.Message, user *db.User) bool {
 
 func (m *Model) updateViewportContent() {
 	var b strings.Builder
-	systemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Italic(true)
-	replyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Italic(true)
-	mentionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("52")).Bold(true)
+	systemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(design.TextDim)).Italic(true)
+	replyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(design.TextMuted)).Italic(true)
+	mentionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(design.Accent)).Bold(true)
 
 	for _, msg := range m.messages {
-		timeStr := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(msg.CreatedAt.Format("15:04"))
+		timeStr := lipgloss.NewStyle().Foreground(lipgloss.Color(design.TextDim)).Render(msg.CreatedAt.Format("15:04"))
 		if msg.UserID == "system" {
 			b.WriteString(systemStyle.Render(msg.Content) + "\n")
 			continue
@@ -1249,7 +1260,7 @@ func (m *Model) updateViewportContent() {
 			color = m.user.Color
 		}
 		if color == "" {
-			color = "#7C7C7C"
+			color = design.TextSecondary
 		}
 		userStyle = userStyle.Foreground(lipgloss.Color(color))
 
@@ -1261,7 +1272,7 @@ func (m *Model) updateViewportContent() {
 		}
 		header := fmt.Sprintf("[%s] %s%s", timeStr, roleBadge, userStyle.Render(msg.Username))
 		if msg.IsEdited {
-			header += lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render(" (edited)")
+			header += lipgloss.NewStyle().Foreground(lipgloss.Color(design.TextMuted)).Render(" (edited)")
 		}
 		if messageMentionsUser(msg, m.user) {
 			header = mentionStyle.Render(header)
@@ -1298,14 +1309,14 @@ func (m *Model) updateViewportContent() {
 		}
 
 		if msg.ReplyToID != "" || strings.Contains(content, "\n") {
-			b.WriteString(header + " " + lipgloss.NewStyle().Foreground(lipgloss.Color("242")).Render(shortMessageID(msg.ID)) + "\n")
+			b.WriteString(header + " " + lipgloss.NewStyle().Foreground(lipgloss.Color(design.TextDim)).Render(shortMessageID(msg.ID)) + "\n")
 			if msg.ReplyToID != "" {
 				b.WriteString(replyStyle.Render("  ↪ "+msg.ReplyToUsername+": "+snippet(msg.ReplyToContent)) + "\n")
 			}
 			b.WriteString(indentBlock(content, "  ") + "\n")
 			continue
 		}
-		b.WriteString(fmt.Sprintf("%s %s: %s\n", header, lipgloss.NewStyle().Foreground(lipgloss.Color("242")).Render(shortMessageID(msg.ID)), content))
+		b.WriteString(fmt.Sprintf("%s %s: %s\n", header, lipgloss.NewStyle().Foreground(lipgloss.Color(design.TextDim)).Render(shortMessageID(msg.ID)), content))
 	}
 
 	m.viewport.SetContent(strings.TrimRight(b.String(), "\n"))
@@ -1474,12 +1485,12 @@ func (m *Model) View() string {
 	}
 	if m.appState == bannedState {
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center,
-			lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true).Render("YOU ARE BANNED FROM THIS SERVER.\n\nPress any key to exit."))
+			lipgloss.NewStyle().Foreground(lipgloss.Color(design.Danger)).Bold(true).Render("YOU ARE BANNED FROM THIS SERVER.\n\nPress any key to exit."))
 	}
 	if m.appState == onboardingState {
 		card := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(m.user.Color)).
+			BorderForeground(lipgloss.Color(design.Accent)).
 			Padding(1, 2).
 			Width(min(90, m.width-4)).
 			Render(m.onboarding.View())
@@ -1487,7 +1498,7 @@ func (m *Model) View() string {
 	}
 	if len(m.channels) == 0 {
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center,
-			lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render("No accessible channels.\nAsk an admin to invite you or create a public channel."))
+			lipgloss.NewStyle().Foreground(lipgloss.Color(design.TextMuted)).Render("No accessible channels.\nAsk an admin to invite you or create a public channel."))
 	}
 
 	leftW := int(float64(m.width) * 0.22)
@@ -1520,15 +1531,15 @@ func (m *Model) View() string {
 		topic = "No topic set"
 	}
 	header := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#ffffff")).
-		Background(lipgloss.Color(m.user.Color)).
+		Foreground(lipgloss.Color(design.AccentInk)).
+		Background(lipgloss.Color(design.Accent)).
 		Bold(true).
 		Width(m.width).
 		Align(lipgloss.Center).
 		Render(fmt.Sprintf(" %s • %s • Topic: %s ", channelLabel(current), current.Kind, topic))
 
 	var left strings.Builder
-	left.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(m.user.Color)).Bold(true).Render("  CHANNELS"))
+	left.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(design.Accent)).Bold(true).Render("  CHANNELS"))
 	left.WriteString("\n\n")
 	for i, ch := range m.channels {
 		label := channelLabel(ch)
@@ -1540,7 +1551,7 @@ func (m *Model) View() string {
 			label += ")"
 		}
 		if i == m.activeChan {
-			left.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render("  > " + label))
+			left.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(design.Accent)).Bold(true).Render("  > " + label))
 		} else {
 			left.WriteString("    " + label)
 		}
@@ -1548,7 +1559,7 @@ func (m *Model) View() string {
 	}
 
 	border := lipgloss.RoundedBorder()
-	panel := lipgloss.NewStyle().Border(border).BorderForeground(lipgloss.Color(m.user.Color))
+	panel := lipgloss.NewStyle().Border(border).BorderForeground(lipgloss.Color(design.Border))
 	leftPane := panel.Width(leftW).Height(midH).Render(left.String())
 
 	var right strings.Builder
@@ -1564,7 +1575,11 @@ func (m *Model) View() string {
 		if u.ID == m.user.ID {
 			me = " (you)"
 		}
-		right.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(u.Color)).Render("  • " + role + u.Username + me))
+		userColor := u.Color
+		if userColor == "" {
+			userColor = design.TextSecondary
+		}
+		right.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(userColor)).Render("  • " + role + u.Username + me))
 		right.WriteString("\n")
 	}
 	right.WriteString("\n  YOU\n\n")

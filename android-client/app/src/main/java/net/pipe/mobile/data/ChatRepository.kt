@@ -10,7 +10,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 interface ChatRepository {
-    suspend fun login(endpoint: String, username: String): SessionBundle
+    suspend fun login(endpoint: String, username: String, pin: String): SessionBundle
     suspend fun loadProfile(endpoint: String, token: String): ProfileSummary
     suspend fun loadChats(endpoint: String, token: String): List<ChatSummary>
     suspend fun loadMessages(endpoint: String, token: String, chatId: String): List<MessageItem>
@@ -34,13 +34,14 @@ interface ChatRepository {
 }
 
 class MobileApiRepository : ChatRepository {
-    override suspend fun login(endpoint: String, username: String): SessionBundle {
+    override suspend fun login(endpoint: String, username: String, pin: String): SessionBundle {
         val response = request(
             endpoint = endpoint,
             path = "/api/mobile/login",
             method = "POST",
             body = JSONObject()
                 .put("username", username.trim())
+                .put("pin", pin)
                 .toString(),
         )
         val token = response.getString("token")

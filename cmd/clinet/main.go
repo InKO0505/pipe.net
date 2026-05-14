@@ -18,6 +18,8 @@ func main() {
 	port := getenvInt("CLINET_PORT", 2222)
 	apiPort := getenvInt("CLINET_API_PORT", 8080)
 	hostKeyPath := getenv("CLINET_HOST_KEY_PATH", ".ssh/term_info_ed25519")
+	apiTLSCert := getenv("CLINET_API_TLS_CERT", "")
+	apiTLSKey := getenv("CLINET_API_TLS_KEY", "")
 
 	database, err := db.InitDB(dbPath)
 	if err != nil {
@@ -26,7 +28,7 @@ func main() {
 	defer database.Close()
 
 	broker := pubsub.NewBroker()
-	api.Start(database, api.Config{Port: apiPort})
+	api.Start(database, api.Config{Port: apiPort, TLSCertFile: apiTLSCert, TLSKeyFile: apiTLSKey})
 	ssh.Start(database, broker, ssh.Config{
 		Port:        port,
 		HostKeyPath: hostKeyPath,
