@@ -14,3 +14,9 @@ clinet.db
 server.log
 test_ssh.exp
 clinet-connect
+
+# Design handoff (local only)
+handoff/
+
+# Claude memory
+memory/
