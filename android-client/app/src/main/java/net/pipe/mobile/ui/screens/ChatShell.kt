@@ -1,34 +1,24 @@
 package net.pipe.mobile.ui.screens
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,10 +35,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.dp
 import net.pipe.mobile.data.ChatSummary
 import net.pipe.mobile.data.MessageItem
@@ -57,35 +50,8 @@ import net.pipe.mobile.data.UserSummary
 import net.pipe.mobile.ui.PipeUiState
 import net.pipe.mobile.ui.PipeViewModel
 import net.pipe.mobile.ui.SheetContent
-
-private object PipePalette {
-    val Background = Color(0xFF070B1C)
-    val BackgroundElevated = Color(0xFF0C1230)
-    val Panel = Color(0xFF101734)
-    val PanelRaised = Color(0xFF141E42)
-    val PanelSoft = Color(0xFF182552)
-    val Outline = Color(0xFF27335F)
-    val OutlineBright = Color(0xFF395095)
-    val TextPrimary = Color(0xFFF5F7FF)
-    val TextSecondary = Color(0xFFAFB8DD)
-    val TextMuted = Color(0xFF8090BD)
-    val AccentCyan = Color(0xFF1FD1FF)
-    val AccentBlue = Color(0xFF2F84FF)
-    val AccentViolet = Color(0xFF9242FF)
-    val AccentLilac = Color(0xFFC19BFF)
-    val Success = Color(0xFF2ED3A5)
-    val Warning = Color(0xFFFFB454)
-    val Danger = Color(0xFFFF6D8D)
-    val MineBubble = Color(0xFF14285A)
-    val OtherBubble = Color(0xFF0D1530)
-    val Selection = Color(0xFF1A2654)
-    val SoftCyan = Color(0x3323CBFF)
-    val SoftViolet = Color(0x339242FF)
-    val SoftDanger = Color(0x33FF6D8D)
-}
-
-private val PipePanelShape = RoundedCornerShape(28.dp)
-private val PipeCardShape = RoundedCornerShape(24.dp)
+import net.pipe.mobile.ui.theme.PipeColors
+import net.pipe.mobile.ui.theme.PipeSpace
 
 @Composable
 fun ChatShell(viewModel: PipeViewModel) {
@@ -93,13 +59,14 @@ fun ChatShell(viewModel: PipeViewModel) {
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = PipePalette.Background,
+        color = PipeColors.Bg,
     ) {
         if (state.token == null) {
             ConnectScreen(
                 state = state,
                 onEndpointChange = viewModel::updateEndpoint,
                 onUsernameChange = viewModel::updateUsername,
+                onPinChange = viewModel::updatePin,
                 onConnect = viewModel::connect,
             )
         } else {
@@ -137,114 +104,106 @@ private fun ConnectScreen(
     state: PipeUiState,
     onEndpointChange: (String) -> Unit,
     onUsernameChange: (String) -> Unit,
+    onPinChange: (String) -> Unit,
     onConnect: () -> Unit,
 ) {
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(screenBackgroundBrush())
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.Center,
+            .background(PipeColors.BgDeep)
+            .padding(24.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Spacer(modifier = Modifier.height(18.dp))
-        PipeBrandMark(modifier = Modifier.align(Alignment.CenterHorizontally))
-        Spacer(modifier = Modifier.height(20.dp))
-        Text(
-            text = "Pipe Net",
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-            color = PipePalette.TextPrimary,
-            style = MaterialTheme.typography.headlineLarge,
-            fontWeight = FontWeight.Black,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "A sharper mobile shell for your local network chat server.",
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-            color = PipePalette.TextSecondary,
-            style = MaterialTheme.typography.bodyLarge,
-        )
-        Spacer(modifier = Modifier.height(22.dp))
-        PipePanel(modifier = Modifier.fillMaxWidth(), accent = true) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(PipeSpace.rXLarge))
+                .background(PipeColors.Surface1)
+                .padding(20.dp),
+        ) {
             Text(
-                text = "Connect once",
-                color = PipePalette.TextPrimary,
-                style = MaterialTheme.typography.titleLarge,
+                text = "pipe.net",
+                style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
+                color = PipeColors.Text,
             )
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "The app now creates mobile users automatically. Use a clean username and save the server address once.",
-                color = PipePalette.TextSecondary,
-                style = MaterialTheme.typography.bodyMedium,
+                text = "terminal social network",
+                color = PipeColors.TextMuted,
+                style = MaterialTheme.typography.bodySmall,
             )
-            Spacer(modifier = Modifier.height(16.dp))
-            TipsRow()
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
             OutlinedTextField(
                 value = state.endpoint,
                 onValueChange = onEndpointChange,
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Server address") },
-                placeholder = { Text("http://192.168.x.x:8080") },
+                placeholder = { Text("http://10.0.2.2:8080") },
                 singleLine = true,
                 colors = pipeTextFieldColors(),
             )
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(PipeSpace.md))
             OutlinedTextField(
                 value = state.usernameInput,
                 onValueChange = onUsernameChange,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Username") },
-                placeholder = { Text("inko_mobile") },
+                label = { Text("Login") },
+                placeholder = { Text("inko") },
                 singleLine = true,
                 colors = pipeTextFieldColors(),
             )
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = "Allowed: letters, numbers, `_` and `-`. Minimum 2 characters.",
-                color = PipePalette.TextMuted,
-                style = MaterialTheme.typography.bodySmall,
+            Spacer(modifier = Modifier.height(PipeSpace.md))
+            OutlinedTextField(
+                value = state.pinInput,
+                onValueChange = onPinChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("PIN") },
+                placeholder = { Text("Set with /setpin in SSH client") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                colors = pipeTextFieldColors(),
             )
             if (state.error != null) {
-                Spacer(modifier = Modifier.height(14.dp))
-                ErrorBanner(state.error)
+                Spacer(modifier = Modifier.height(PipeSpace.md))
+                Text(
+                    text = state.error,
+                    color = PipeColors.Danger,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             }
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(20.dp))
             Button(
                 onClick = onConnect,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .defaultMinSize(minHeight = 54.dp),
+                    .height(PipeSpace.minTap),
                 enabled = !state.loading,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = PipePalette.AccentBlue,
-                    contentColor = PipePalette.TextPrimary,
-                    disabledContainerColor = PipePalette.PanelSoft,
-                    disabledContentColor = PipePalette.TextMuted,
+                    containerColor = PipeColors.Accent,
+                    contentColor = PipeColors.AccentInk,
+                    disabledContainerColor = PipeColors.Surface3,
+                    disabledContentColor = PipeColors.TextDim,
                 ),
-                shape = RoundedCornerShape(20.dp),
             ) {
                 if (state.loading) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(18.dp),
                         strokeWidth = 2.dp,
-                        color = PipePalette.TextPrimary,
+                        color = PipeColors.AccentInk,
                     )
                 } else {
-                    Text("Open workspace")
+                    Text("Connect", fontWeight = FontWeight.SemiBold)
                 }
             }
+            Spacer(modifier = Modifier.height(PipeSpace.sm))
+            Text(
+                text = "Emulator: http://10.0.2.2:8080  ·  Real device: http://<LAN-IP>:8080",
+                color = PipeColors.TextDim,
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
-        Spacer(modifier = Modifier.height(14.dp))
-        Text(
-            text = "If the browser can open `/api/mobile/health` but the app still fails, install the latest APK from this branch.",
-            color = PipePalette.TextMuted,
-            style = MaterialTheme.typography.bodySmall,
-        )
-        Spacer(modifier = Modifier.height(12.dp))
     }
 }
 
@@ -281,16 +240,11 @@ private fun ChatScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(screenBackgroundBrush())
-            .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
-        HeaderHero(
-            state = state,
-            onShowMentions = onShowMentions,
-            onRefresh = onRefresh,
-        )
-        StatusStrip(state = state)
+        Header(state = state, onShowMentions = onShowMentions, onRefresh = onRefresh)
+        ProfileStrip(state = state)
+
         if (state.profile?.role == "owner") {
             ChannelComposerCard(
                 state = state,
@@ -299,6 +253,7 @@ private fun ChatScreen(
                 onCreate = onCreateChannel,
             )
         }
+
         QuickActions(
             state = state,
             onDmInputChange = onDmInputChange,
@@ -307,44 +262,33 @@ private fun ChatScreen(
             onOpenModLog = onOpenModLog,
             onLookupUser = onLookupUser,
         )
-        SectionHeader(
-            title = if (state.showingMentions) "Inbox" else "Chats",
-            subtitle = if (state.showingMentions) {
-                "${state.messages.size} mentions loaded"
-            } else {
-                "${state.chats.size} rooms available"
-            },
-        )
+
+        SectionLabel(text = if (state.showingMentions) "Inbox" else "Chats")
+
         LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 2.dp, bottom = 10.dp),
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(PipeSpace.sm),
         ) {
             items(state.chats, key = { it.id }) { chat ->
                 ChatCard(
                     chat = chat,
-                    selected = chat.id == state.selectedChatId && !state.showingMentions,
+                    selected = chat.id == state.selectedChatId,
                     onClick = { onChatClick(chat.id) },
                 )
             }
         }
-        Surface(
+
+        MessageTimeline(
+            messages = state.messages,
+            selectedMessageId = state.selectedMessageId,
+            onSelectMessage = onSelectMessage,
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            color = PipePalette.Panel,
-            shape = RoundedCornerShape(30.dp),
-            border = BorderStroke(1.dp, PipePalette.Outline.copy(alpha = 0.8f)),
-        ) {
-            MessageTimeline(
-                messages = state.messages,
-                selectedMessageId = state.selectedMessageId,
-                onSelectMessage = onSelectMessage,
-            )
-        }
+                .padding(horizontal = PipeSpace.md),
+        )
+
         if (state.activeSheet != SheetContent.None) {
             InfoSheet(
                 state = state,
@@ -355,92 +299,74 @@ private fun ChatScreen(
                 onClose = onCloseSheet,
             )
         }
-        ComposerDock(
-            state = state,
-            selectedMessage = selectedMessage,
-            replyTarget = replyTarget,
-            onDraftChange = onDraftChange,
-            onStartReply = onStartReply,
-            onStartEdit = onStartEdit,
-            onDeleteSelected = onDeleteSelected,
-            onCancelEdit = onCancelEdit,
-            onSend = onSend,
-        )
-    }
-}
 
-@Composable
-private fun HeaderHero(
-    state: PipeUiState,
-    onShowMentions: () -> Unit,
-    onRefresh: () -> Unit,
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        color = Color.Transparent,
-        shape = RoundedCornerShape(32.dp),
-        border = BorderStroke(1.dp, PipePalette.Outline.copy(alpha = 0.9f)),
-    ) {
-        Box(
+        Column(
             modifier = Modifier
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            PipePalette.BackgroundElevated,
-                            PipePalette.Panel,
-                            PipePalette.PanelSoft,
-                        ),
-                    ),
-                )
-                .padding(18.dp),
+                .fillMaxWidth()
+                .background(PipeColors.Surface1)
+                .padding(PipeSpace.md),
         ) {
-            Column {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = state.profile?.username ?: "unknown",
-                            color = PipePalette.TextPrimary,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Black,
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = shortEndpoint(state.profile?.endpoint.orEmpty()),
-                            color = PipePalette.TextSecondary,
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(horizontalAlignment = Alignment.End) {
-                        SmallActionButton(
-                            text = if (state.showingMentions) "Inbox live" else "Inbox",
-                            onClick = onShowMentions,
-                            accent = state.showingMentions,
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        SmallActionButton(
-                            text = if (state.loading) "Syncing" else "Sync",
-                            onClick = onRefresh,
-                            accent = false,
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(14.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    PipeChip(text = roleLabel(state.profile?.role.orEmpty()), background = PipePalette.SoftViolet, color = PipePalette.AccentLilac)
-                    PipeChip(text = "${state.chats.size} chats", background = PipePalette.SoftCyan, color = PipePalette.AccentCyan)
-                    PipeChip(text = "${state.messages.size} loaded", background = PipePalette.PanelRaised, color = PipePalette.TextSecondary)
+            if (selectedMessage != null) {
+                SelectedMessageBar(
+                    selectedMessage = selectedMessage,
+                    isEditing = state.editingMessageId != null,
+                    onReply = onStartReply,
+                    onEdit = onStartEdit,
+                    onDelete = onDeleteSelected,
+                    onCancel = onCancelEdit,
+                )
+                Spacer(modifier = Modifier.height(PipeSpace.sm))
+            }
+            if (replyTarget != null || state.editingMessageId != null) {
+                ReplyBanner(
+                    replyTarget = replyTarget,
+                    isEditing = state.editingMessageId != null,
+                    onCancel = onCancelEdit,
+                )
+                Spacer(modifier = Modifier.height(PipeSpace.sm))
+            }
+            if (state.error != null) {
+                Text(
+                    text = state.error,
+                    color = PipeColors.Danger,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(modifier = Modifier.height(PipeSpace.sm))
+            }
+            OutlinedTextField(
+                value = state.composerText,
+                onValueChange = onDraftChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(if (state.editingMessageId != null) "Edit message" else "Message") },
+                placeholder = { Text(if (state.editingMessageId != null) "Update the selected message" else "Write something") },
+                shape = RoundedCornerShape(PipeSpace.rMedium),
+                colors = pipeTextFieldColors(),
+            )
+            Spacer(modifier = Modifier.height(PipeSpace.sm))
+            Button(
+                onClick = onSend,
+                enabled = !state.loading && state.composerText.isNotBlank() && state.selectedChatId != null,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(PipeSpace.minTap),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = PipeColors.Accent,
+                    contentColor = PipeColors.AccentInk,
+                    disabledContainerColor = PipeColors.Surface3,
+                    disabledContentColor = PipeColors.TextDim,
+                ),
+            ) {
+                if (state.loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = PipeColors.AccentInk,
+                    )
+                } else {
+                    Text(
+                        text = if (state.editingMessageId != null) "Save" else "↵  Send",
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
             }
         }
@@ -448,40 +374,95 @@ private fun HeaderHero(
 }
 
 @Composable
-private fun StatusStrip(state: PipeUiState) {
-    val profile = state.profile ?: return
-    PipePanel(
+private fun Header(
+    state: PipeUiState,
+    onShowMentions: () -> Unit,
+    onRefresh: () -> Unit,
+) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
+            .background(PipeColors.Surface1)
+            .padding(horizontal = PipeSpace.lg, vertical = PipeSpace.md),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(46.dp)
-                    .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(PipePalette.AccentCyan, PipePalette.AccentViolet))),
-                contentAlignment = Alignment.Center,
-            ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "pipe.net",
+                color = PipeColors.Text,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+            if (state.profile?.endpoint != null) {
                 Text(
-                    text = profile.username.take(1).uppercase(),
-                    color = PipePalette.TextPrimary,
-                    fontWeight = FontWeight.Black,
-                )
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = profile.bio.ifBlank { "Local chat without terminal friction." },
-                    color = PipePalette.TextPrimary,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
+                    text = state.profile.endpoint,
+                    color = PipeColors.TextDim,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+            }
+        }
+        Spacer(modifier = Modifier.width(PipeSpace.md))
+        TextButton(onClick = onShowMentions) {
+            Text("Inbox", color = PipeColors.TextSecondary)
+        }
+        TextButton(onClick = onRefresh) {
+            Text("Sync", color = PipeColors.TextSecondary)
+        }
+    }
+}
+
+@Composable
+private fun ProfileStrip(state: PipeUiState) {
+    val profile = state.profile ?: return
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = PipeSpace.md, vertical = PipeSpace.sm)
+            .clip(RoundedCornerShape(PipeSpace.rLarge))
+            .background(PipeColors.Surface2)
+            .padding(PipeSpace.md),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(PipeSpace.rMedium))
+                .background(PipeColors.Surface3),
+            contentAlignment = Alignment.Center,
+        ) {
+            val glyph = when (profile.role) {
+                "owner" -> "👑"
+                "admin" -> "★"
+                else -> profile.username.take(1).uppercase()
+            }
+            Text(
+                text = glyph,
+                color = if (profile.role == "owner") PipeColors.Accent else PipeColors.Text,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Spacer(modifier = Modifier.width(PipeSpace.md))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = profile.role.uppercase(),
+                color = PipeColors.Accent,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = TextUnit(0.18f, TextUnitType.Em),
+            )
+            Text(
+                text = profile.username,
+                color = PipeColors.Text,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            if (profile.bio.isNotBlank()) {
                 Text(
-                    text = "Selected room: ${state.chats.firstOrNull { it.id == state.selectedChatId }?.title ?: "none"}",
-                    color = PipePalette.TextMuted,
+                    text = profile.bio,
+                    color = PipeColors.TextMuted,
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -498,66 +479,60 @@ private fun ChannelComposerCard(
     onTogglePrivacy: () -> Unit,
     onCreate: () -> Unit,
 ) {
-    PipePanel(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        accent = true,
+            .padding(horizontal = PipeSpace.md)
+            .clip(RoundedCornerShape(PipeSpace.rLarge))
+            .background(PipeColors.Surface1)
+            .padding(PipeSpace.md),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Create channel",
-                    color = PipePalette.TextPrimary,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Owner controls stay visible but no longer dominate the whole screen.",
-                    color = PipePalette.TextSecondary,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            PipeChip(
-                text = if (state.newChannelPrivate) "Private" else "Public",
-                background = if (state.newChannelPrivate) PipePalette.SoftViolet else PipePalette.SoftCyan,
-                color = if (state.newChannelPrivate) PipePalette.AccentLilac else PipePalette.AccentCyan,
-            )
-        }
-        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = "NEW CHANNEL",
+            color = PipeColors.TextMuted,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = TextUnit(0.18f, TextUnitType.Em),
+        )
+        Spacer(modifier = Modifier.height(PipeSpace.sm))
         OutlinedTextField(
             value = state.newChannelName,
             onValueChange = onNameChange,
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Channel name") },
-            placeholder = { Text("#launch-room") },
             singleLine = true,
             colors = pipeTextFieldColors(),
         )
-        Spacer(modifier = Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            TextButton(
-                onClick = onTogglePrivacy,
-                colors = ButtonDefaults.textButtonColors(
-                    contentColor = PipePalette.TextPrimary,
-                    containerColor = PipePalette.PanelSoft,
-                ),
-                shape = RoundedCornerShape(18.dp),
-            ) {
-                Text(if (state.newChannelPrivate) "Make public" else "Make private")
-            }
-            Button(
-                onClick = onCreate,
-                enabled = state.newChannelName.isNotBlank() && !state.loading,
-                colors = primaryButtonColors(),
-                shape = RoundedCornerShape(18.dp),
-            ) {
-                Text("Create")
+        Spacer(modifier = Modifier.height(PipeSpace.sm))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = if (state.newChannelPrivate) "Private" else "Public",
+                color = PipeColors.TextSecondary,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Row {
+                TextButton(onClick = onTogglePrivacy) {
+                    Text(
+                        text = if (state.newChannelPrivate) "Make public" else "Make private",
+                        color = PipeColors.TextSecondary,
+                    )
+                }
+                Button(
+                    onClick = onCreate,
+                    enabled = state.newChannelName.isNotBlank() && !state.loading,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = PipeColors.Accent,
+                        contentColor = PipeColors.AccentInk,
+                        disabledContainerColor = PipeColors.Surface3,
+                        disabledContentColor = PipeColors.TextDim,
+                    ),
+                ) {
+                    Text("Create")
+                }
             }
         }
     }
@@ -572,164 +547,95 @@ private fun QuickActions(
     onOpenModLog: () -> Unit,
     onLookupUser: (String) -> Unit,
 ) {
-    PipePanel(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = PipeSpace.md)
+            .clip(RoundedCornerShape(PipeSpace.rLarge))
+            .background(PipeColors.Surface1)
+            .padding(PipeSpace.md),
     ) {
-        Text(
-            text = "Quick actions",
-            color = PipePalette.TextPrimary,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = "Search a user once, then jump straight into DM, profile lookup, people or moderation.",
-            color = PipePalette.TextSecondary,
-            style = MaterialTheme.typography.bodySmall,
-        )
-        Spacer(modifier = Modifier.height(14.dp))
         OutlinedTextField(
             value = state.quickDmInput,
             onValueChange = onDmInputChange,
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("User focus") },
+            label = { Text("Find user or open DM") },
             placeholder = { Text("username") },
             singleLine = true,
             colors = pipeTextFieldColors(),
         )
-        Spacer(modifier = Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            QuickActionButton(
-                text = "DM",
-                modifier = Modifier.weight(1f),
-                enabled = state.quickDmInput.isNotBlank(),
-                accent = true,
-                onClick = onCreateDm,
-            )
-            QuickActionButton(
-                text = "Profile",
-                modifier = Modifier.weight(1f),
-                enabled = state.quickDmInput.isNotBlank(),
-                accent = false,
-                onClick = { onLookupUser(state.quickDmInput) },
-            )
-        }
-        Spacer(modifier = Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            QuickActionButton(
-                text = "People",
-                modifier = Modifier.weight(1f),
-                enabled = true,
-                accent = false,
-                onClick = onOpenMembers,
-            )
-            QuickActionButton(
-                text = "Log",
-                modifier = Modifier.weight(1f),
-                enabled = true,
-                accent = false,
-                onClick = onOpenModLog,
-            )
+        Spacer(modifier = Modifier.height(PipeSpace.xs))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            TextButton(onClick = onCreateDm) { Text("DM", color = PipeColors.TextSecondary) }
+            TextButton(onClick = { onLookupUser(state.quickDmInput) }) { Text("Profile", color = PipeColors.TextSecondary) }
+            TextButton(onClick = onOpenMembers) { Text("People", color = PipeColors.TextSecondary) }
+            TextButton(onClick = onOpenModLog) { Text("Log", color = PipeColors.TextSecondary) }
         }
     }
 }
 
 @Composable
-private fun SectionHeader(title: String, subtitle: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column {
-            Text(
-                text = title,
-                color = PipePalette.TextPrimary,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = subtitle,
-                color = PipePalette.TextMuted,
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-    }
+private fun SectionLabel(text: String) {
+    Text(
+        text = text.uppercase(),
+        modifier = Modifier.padding(horizontal = PipeSpace.lg, vertical = PipeSpace.xs),
+        color = PipeColors.TextMuted,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = TextUnit(0.18f, TextUnitType.Em),
+    )
 }
 
 @Composable
 private fun ChatCard(chat: ChatSummary, selected: Boolean, onClick: () -> Unit) {
-    Surface(
+    Column(
         modifier = Modifier
-            .width(196.dp)
-            .clip(PipeCardShape)
-            .clickable(onClick = onClick),
-        color = if (selected) Color.Transparent else PipePalette.Panel,
-        shape = PipeCardShape,
-        border = BorderStroke(
-            1.dp,
-            if (selected) PipePalette.AccentCyan.copy(alpha = 0.9f) else PipePalette.Outline.copy(alpha = 0.8f),
-        ),
+            .width(200.dp)
+            .padding(start = PipeSpace.md, end = PipeSpace.xs)
+            .clip(RoundedCornerShape(PipeSpace.rLarge))
+            .background(if (selected) PipeColors.Surface2 else PipeColors.Surface1)
+            .clickable(onClick = onClick)
+            .padding(PipeSpace.md),
     ) {
-        Box(
-            modifier = Modifier
-                .background(
-                    if (selected) {
-                        Brush.linearGradient(
-                            listOf(
-                                PipePalette.PanelSoft,
-                                PipePalette.BackgroundElevated,
-                                PipePalette.Panel,
-                            ),
-                        )
-                    } else {
-                        Brush.linearGradient(listOf(PipePalette.Panel, PipePalette.PanelRaised))
-                    },
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .width(2.dp)
+                        .height(14.dp)
+                        .background(PipeColors.Accent),
                 )
-                .padding(16.dp),
-        ) {
-            Column {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = chat.title,
-                        color = PipePalette.TextPrimary,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    PipeChip(
-                        text = if (chat.isPrivate) "Private" else "Open",
-                        background = if (chat.isPrivate) PipePalette.SoftViolet else PipePalette.PanelSoft,
-                        color = if (chat.isPrivate) PipePalette.AccentLilac else PipePalette.TextSecondary,
-                    )
+                Spacer(modifier = Modifier.width(PipeSpace.xs))
+            }
+            Text(
+                text = chat.title,
+                color = if (selected) PipeColors.Text else PipeColors.TextSecondary,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        Spacer(modifier = Modifier.height(PipeSpace.xs))
+        Text(
+            text = chat.subtitle.ifBlank { if (chat.isPrivate) "⊡ private" else "# public" },
+            color = PipeColors.TextDim,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (chat.unreadCount > 0 || chat.mentionCount > 0) {
+            Spacer(modifier = Modifier.height(PipeSpace.xs))
+            Row {
+                if (chat.unreadCount > 0) {
+                    Badge(text = chat.unreadCount.toString(), background = PipeColors.Accent, textColor = PipeColors.AccentInk)
                 }
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = chat.subtitle.ifBlank { "No topic yet." },
-                    color = PipePalette.TextSecondary,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(modifier = Modifier.height(14.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (chat.unreadCount > 0) {
-                        Badge(text = "${chat.unreadCount} new", background = PipePalette.SoftCyan, color = PipePalette.AccentCyan)
-                    }
-                    if (chat.mentionCount > 0) {
-                        Badge(text = "@${chat.mentionCount}", background = PipePalette.SoftViolet, color = PipePalette.AccentLilac)
-                    }
-                    if (chat.unreadCount == 0 && chat.mentionCount == 0) {
-                        Badge(text = "quiet", background = PipePalette.PanelSoft, color = PipePalette.TextMuted)
-                    }
+                if (chat.mentionCount > 0) {
+                    Spacer(modifier = Modifier.width(if (chat.unreadCount > 0) PipeSpace.xs else 0.dp))
+                    Badge(text = "@${chat.mentionCount}", background = PipeColors.Accent, textColor = PipeColors.AccentInk)
                 }
             }
         }
@@ -741,202 +647,69 @@ private fun MessageTimeline(
     messages: List<MessageItem>,
     selectedMessageId: String?,
     onSelectMessage: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    if (messages.isEmpty()) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "No messages yet",
-                    color = PipePalette.TextPrimary,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "Pick a room or send the first message to kick the conversation off.",
-                    color = PipePalette.TextSecondary,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-        }
-        return
-    }
-
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(PipeSpace.sm),
     ) {
         items(messages, key = { it.id }) { message ->
-            MessageBubble(
-                message = message,
-                selected = message.id == selectedMessageId,
-                onClick = { onSelectMessage(message.id) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun MessageBubble(
-    message: MessageItem,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (message.isMine) Arrangement.End else Arrangement.Start,
-    ) {
-        Surface(
-            modifier = Modifier
-                .widthIn(max = 320.dp)
-                .clickable(onClick = onClick),
-            color = when {
-                selected -> PipePalette.Selection
-                message.isMine -> PipePalette.MineBubble
-                else -> PipePalette.OtherBubble
-            },
-            shape = RoundedCornerShape(
-                topStart = 24.dp,
-                topEnd = 24.dp,
-                bottomEnd = if (message.isMine) 10.dp else 24.dp,
-                bottomStart = if (message.isMine) 24.dp else 10.dp,
-            ),
-            border = BorderStroke(
-                1.dp,
-                when {
-                    selected -> PipePalette.AccentCyan
-                    message.isMine -> PipePalette.AccentBlue.copy(alpha = 0.45f)
-                    else -> PipePalette.Outline.copy(alpha = 0.7f)
-                },
-            ),
-        ) {
-            Column(modifier = Modifier.padding(14.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(PipeSpace.rLarge))
+                    .background(
+                        when {
+                            message.id == selectedMessageId -> PipeColors.Surface3
+                            message.isMine -> PipeColors.Surface2
+                            else -> PipeColors.Surface1
+                        },
+                    )
+                    .clickable { onSelectMessage(message.id) }
+                    .padding(PipeSpace.md),
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        text = if (message.isMine) "You" else message.author,
-                        color = if (message.isMine) PipePalette.AccentCyan else PipePalette.TextPrimary,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.labelLarge,
+                        text = message.author,
+                        fontWeight = FontWeight.SemiBold,
+                        color = PipeColors.Text,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = buildString {
-                            append(message.timeLabel)
-                            if (message.isEdited) append(" · edited")
-                        },
-                        color = PipePalette.TextMuted,
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
-                if (message.replyPreview.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Surface(
-                        color = PipePalette.PanelRaised.copy(alpha = 0.95f),
-                        shape = RoundedCornerShape(16.dp),
-                        border = BorderStroke(1.dp, PipePalette.Outline.copy(alpha = 0.7f)),
-                    ) {
+                    Row {
+                        if (message.isEdited) {
+                            Text(
+                                text = "edited",
+                                color = PipeColors.TextDim,
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                            Spacer(modifier = Modifier.width(PipeSpace.sm))
+                        }
                         Text(
-                            text = message.replyPreview,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                            color = PipePalette.TextSecondary,
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
+                            text = message.timeLabel,
+                            color = PipeColors.TextDim,
+                            style = MaterialTheme.typography.labelSmall,
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(10.dp))
+                if (message.replyPreview.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(PipeSpace.xs))
+                    Text(
+                        text = "↳ ${message.replyPreview}",
+                        color = PipeColors.TextMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Spacer(modifier = Modifier.height(PipeSpace.xs))
                 Text(
                     text = message.body,
-                    color = PipePalette.TextPrimary,
+                    color = PipeColors.TextSecondary,
                     style = MaterialTheme.typography.bodyMedium,
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ComposerDock(
-    state: PipeUiState,
-    selectedMessage: MessageItem?,
-    replyTarget: MessageItem?,
-    onDraftChange: (String) -> Unit,
-    onStartReply: () -> Unit,
-    onStartEdit: () -> Unit,
-    onDeleteSelected: () -> Unit,
-    onCancelEdit: () -> Unit,
-    onSend: () -> Unit,
-) {
-    PipePanel(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        accent = true,
-    ) {
-        if (selectedMessage != null) {
-            SelectedMessageBar(
-                selectedMessage = selectedMessage,
-                isEditing = state.editingMessageId != null,
-                onReply = onStartReply,
-                onEdit = onStartEdit,
-                onDelete = onDeleteSelected,
-                onCancel = onCancelEdit,
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-        }
-        if (replyTarget != null || state.editingMessageId != null) {
-            ReplyBanner(
-                replyTarget = replyTarget,
-                isEditing = state.editingMessageId != null,
-                onCancel = onCancelEdit,
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-        }
-        if (state.error != null) {
-            ErrorBanner(state.error)
-            Spacer(modifier = Modifier.height(10.dp))
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            OutlinedTextField(
-                value = state.composerText,
-                onValueChange = onDraftChange,
-                modifier = Modifier.weight(1f),
-                label = { Text(if (state.editingMessageId != null) "Edit message" else "Message") },
-                placeholder = { Text(if (state.editingMessageId != null) "Refine the selected message" else "Write something sharp") },
-                shape = RoundedCornerShape(22.dp),
-                colors = pipeTextFieldColors(),
-            )
-            Button(
-                onClick = onSend,
-                enabled = !state.loading && state.composerText.isNotBlank() && state.selectedChatId != null,
-                modifier = Modifier
-                    .defaultMinSize(minWidth = 96.dp, minHeight = 56.dp),
-                colors = primaryButtonColors(),
-                shape = RoundedCornerShape(20.dp),
-            ) {
-                if (state.loading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                        color = PipePalette.TextPrimary,
-                    )
-                } else {
-                    Text(if (state.editingMessageId != null) "Save" else "Send")
-                }
             }
         }
     }
@@ -951,34 +724,38 @@ private fun SelectedMessageBar(
     onDelete: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    Surface(
-        color = PipePalette.PanelRaised,
-        shape = RoundedCornerShape(22.dp),
-        border = BorderStroke(1.dp, PipePalette.Outline.copy(alpha = 0.8f)),
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(PipeSpace.rLarge))
+            .background(PipeColors.Surface2)
+            .padding(PipeSpace.sm),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = if (isEditing) "Editing message" else "Selected message",
-                color = PipePalette.TextPrimary,
-                fontWeight = FontWeight.Bold,
+                text = if (isEditing) "Editing" else "Selected",
+                color = PipeColors.TextMuted,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
             )
-            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = selectedMessage.body,
-                color = PipePalette.TextSecondary,
+                color = PipeColors.TextSecondary,
                 style = MaterialTheme.typography.bodySmall,
-                maxLines = 2,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(modifier = Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SmallTextPill("Reply", onReply)
-                if (selectedMessage.isMine) {
-                    SmallTextPill("Edit", onEdit)
-                    SmallTextPill("Delete", onDelete, destructive = true)
-                }
-                SmallTextPill("Close", onCancel)
+        }
+        Spacer(modifier = Modifier.width(PipeSpace.sm))
+        Row {
+            TextButton(onClick = onReply) { Text("Reply", color = PipeColors.TextSecondary) }
+            if (selectedMessage.isMine) {
+                TextButton(onClick = onEdit) { Text("Edit", color = PipeColors.TextSecondary) }
+                TextButton(onClick = onDelete) { Text("Delete", color = PipeColors.Danger) }
             }
+            TextButton(onClick = onCancel) { Text("✕", color = PipeColors.TextMuted) }
         }
     }
 }
@@ -989,36 +766,33 @@ private fun ReplyBanner(
     isEditing: Boolean,
     onCancel: () -> Unit,
 ) {
-    Surface(
-        color = PipePalette.PanelRaised,
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, PipePalette.Outline.copy(alpha = 0.8f)),
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(PipeSpace.rLarge))
+            .background(PipeColors.Surface2)
+            .padding(PipeSpace.sm),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = if (isEditing) "Editing message" else "↳ reply to ${replyTarget?.author ?: "message"}",
+                color = PipeColors.Accent,
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (replyTarget != null && !isEditing) {
                 Text(
-                    text = if (isEditing) "Editing current draft" else "Replying to ${replyTarget?.author ?: "message"}",
-                    color = PipePalette.AccentLilac,
-                    fontWeight = FontWeight.Bold,
+                    text = replyTarget.body,
+                    color = PipeColors.TextMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                if (replyTarget != null && !isEditing) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = replyTarget.body,
-                        color = PipePalette.TextSecondary,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
             }
-            Spacer(modifier = Modifier.width(12.dp))
-            SmallTextPill("Cancel", onCancel)
         }
+        TextButton(onClick = onCancel) { Text("✕", color = PipeColors.TextMuted) }
     }
 }
 
@@ -1031,10 +805,13 @@ private fun InfoSheet(
     onRemoveMember: () -> Unit,
     onClose: () -> Unit,
 ) {
-    PipePanel(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = PipeSpace.md, vertical = PipeSpace.sm)
+            .clip(RoundedCornerShape(PipeSpace.rLarge))
+            .background(PipeColors.Surface1)
+            .padding(PipeSpace.md),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1043,20 +820,20 @@ private fun InfoSheet(
         ) {
             Text(
                 text = when (state.activeSheet) {
-                    SheetContent.Members -> "People"
-                    SheetContent.UserLookup -> "Profile"
-                    SheetContent.ModLog -> "Moderation log"
+                    SheetContent.Members -> "PEOPLE"
+                    SheetContent.UserLookup -> "PROFILE"
+                    SheetContent.ModLog -> "MOD LOG"
                     SheetContent.None -> ""
                 },
-                color = PipePalette.TextPrimary,
-                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
+                color = PipeColors.TextMuted,
+                style = MaterialTheme.typography.labelSmall,
+                letterSpacing = TextUnit(0.18f, TextUnitType.Em),
             )
-            SmallTextPill("Close", onClose)
+            TextButton(onClick = onClose) { Text("✕", color = PipeColors.TextMuted) }
         }
-        Spacer(modifier = Modifier.height(10.dp))
-        HorizontalDivider(color = PipePalette.Outline.copy(alpha = 0.7f))
-        Spacer(modifier = Modifier.height(10.dp))
+        HorizontalDivider(color = PipeColors.BorderSubtle)
+        Spacer(modifier = Modifier.height(PipeSpace.sm))
         when (state.activeSheet) {
             SheetContent.Members -> MemberSheet(
                 members = state.members,
@@ -1092,28 +869,24 @@ private fun MemberSheet(
             singleLine = true,
             colors = pipeTextFieldColors(),
         )
-        Spacer(modifier = Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Spacer(modifier = Modifier.height(PipeSpace.sm))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
             Button(
                 onClick = onInviteMember,
                 enabled = memberActionInput.isNotBlank(),
-                colors = primaryButtonColors(),
-                shape = RoundedCornerShape(18.dp),
-            ) {
-                Text("Invite")
-            }
-            TextButton(
-                onClick = onRemoveMember,
-                colors = ButtonDefaults.textButtonColors(
-                    contentColor = PipePalette.Danger,
-                    containerColor = PipePalette.SoftDanger,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = PipeColors.Accent,
+                    contentColor = PipeColors.AccentInk,
                 ),
-                shape = RoundedCornerShape(18.dp),
-            ) {
-                Text("Remove")
+            ) { Text("Invite") }
+            TextButton(onClick = onRemoveMember) {
+                Text("Remove", color = PipeColors.Danger)
             }
         }
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(PipeSpace.md))
     }
     MemberList(members)
 }
@@ -1121,30 +894,32 @@ private fun MemberSheet(
 @Composable
 private fun MemberList(members: List<UserSummary>) {
     if (members.isEmpty()) {
-        Text("No members to show.", color = PipePalette.TextSecondary)
+        Text("No members.", color = PipeColors.TextMuted, style = MaterialTheme.typography.bodySmall)
         return
     }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(max = 240.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
+    Column(verticalArrangement = Arrangement.spacedBy(PipeSpace.sm)) {
         members.forEach { member ->
-            Surface(
-                color = PipePalette.PanelRaised,
-                shape = RoundedCornerShape(20.dp),
-                border = BorderStroke(1.dp, PipePalette.Outline.copy(alpha = 0.8f)),
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(PipeSpace.rMedium))
+                    .background(PipeColors.Surface2)
+                    .padding(PipeSpace.md),
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(member.username, fontWeight = FontWeight.Bold, color = PipePalette.TextPrimary)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(member.role, color = PipePalette.AccentLilac, style = MaterialTheme.typography.labelMedium)
-                    if (member.bio.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(member.bio, color = PipePalette.TextSecondary, style = MaterialTheme.typography.bodySmall)
-                    }
+                Text(member.username, fontWeight = FontWeight.SemiBold, color = PipeColors.Text)
+                Text(
+                    text = member.role.uppercase(),
+                    color = when (member.role) {
+                        "owner" -> PipeColors.Accent
+                        "admin" -> PipeColors.Text
+                        else -> PipeColors.TextMuted
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    letterSpacing = TextUnit(0.18f, TextUnitType.Em),
+                )
+                if (member.bio.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(PipeSpace.xs))
+                    Text(member.bio, color = PipeColors.TextMuted, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -1154,20 +929,31 @@ private fun MemberList(members: List<UserSummary>) {
 @Composable
 private fun UserCard(user: UserSummary?) {
     if (user == null) {
-        Text("User not loaded.", color = PipePalette.TextSecondary)
+        Text("User not found.", color = PipeColors.TextMuted, style = MaterialTheme.typography.bodySmall)
         return
     }
-    Surface(
-        color = PipePalette.PanelRaised,
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, PipePalette.Outline.copy(alpha = 0.8f)),
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(PipeSpace.rMedium))
+            .background(PipeColors.Surface2)
+            .padding(PipeSpace.md),
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Text(user.username, fontWeight = FontWeight.Black, color = PipePalette.TextPrimary)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text("Role: ${user.role}", color = PipePalette.AccentLilac)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(user.bio.ifBlank { "No bio set." }, color = PipePalette.TextSecondary)
+        Text(user.username, fontWeight = FontWeight.Bold, color = PipeColors.Text)
+        Spacer(modifier = Modifier.height(PipeSpace.xs))
+        Text(
+            text = user.role.uppercase(),
+            color = when (user.role) {
+                "owner" -> PipeColors.Accent
+                "admin" -> PipeColors.Text
+                else -> PipeColors.TextMuted
+            },
+            style = MaterialTheme.typography.labelSmall,
+            letterSpacing = TextUnit(0.18f, TextUnitType.Em),
+        )
+        if (user.bio.isNotBlank()) {
+            Spacer(modifier = Modifier.height(PipeSpace.xs))
+            Text(user.bio, color = PipeColors.TextMuted, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -1175,283 +961,63 @@ private fun UserCard(user: UserSummary?) {
 @Composable
 private fun ModLogList(items: List<ModLogItem>) {
     if (items.isEmpty()) {
-        Text("Moderation log is empty.", color = PipePalette.TextSecondary)
+        Text("Log is empty.", color = PipeColors.TextMuted, style = MaterialTheme.typography.bodySmall)
         return
     }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(max = 240.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
+    Column(verticalArrangement = Arrangement.spacedBy(PipeSpace.sm)) {
         items.forEach { item ->
-            Surface(
-                color = PipePalette.PanelRaised,
-                shape = RoundedCornerShape(20.dp),
-                border = BorderStroke(1.dp, PipePalette.Outline.copy(alpha = 0.8f)),
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(PipeSpace.rMedium))
+                    .background(PipeColors.Surface2)
+                    .padding(PipeSpace.md),
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text("${item.actor} -> ${item.target}", fontWeight = FontWeight.Bold, color = PipePalette.TextPrimary)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("${item.action} on ${item.channel}", color = PipePalette.AccentLilac, style = MaterialTheme.typography.labelMedium)
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(item.details, color = PipePalette.TextSecondary, style = MaterialTheme.typography.bodySmall)
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(item.createdAt, color = PipePalette.TextMuted, style = MaterialTheme.typography.labelSmall)
-                }
+                Text("${item.actor} → ${item.target}", fontWeight = FontWeight.SemiBold, color = PipeColors.Text)
+                Text(
+                    text = "${item.action} · ${item.channel}",
+                    color = PipeColors.Accent,
+                    style = MaterialTheme.typography.labelSmall,
+                    letterSpacing = TextUnit(0.18f, TextUnitType.Em),
+                )
+                Spacer(modifier = Modifier.height(PipeSpace.xs))
+                Text(item.details, color = PipeColors.TextSecondary, style = MaterialTheme.typography.bodySmall)
+                Spacer(modifier = Modifier.height(PipeSpace.xs))
+                Text(item.createdAt, color = PipeColors.TextDim, style = MaterialTheme.typography.labelSmall)
             }
         }
     }
 }
 
 @Composable
-private fun PipeBrandMark(modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier.size(112.dp),
-        color = Color.Transparent,
-        shape = RoundedCornerShape(34.dp),
-        border = BorderStroke(1.dp, PipePalette.OutlineBright.copy(alpha = 0.8f)),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            PipePalette.PanelSoft,
-                            PipePalette.BackgroundElevated,
-                            PipePalette.Panel,
-                        ),
-                    ),
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "PN",
-                color = PipePalette.TextPrimary,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Black,
-            )
-        }
-    }
-}
-
-@Composable
-private fun TipsRow() {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        TipChip(
-            title = "Phone",
-            text = "Use the PC LAN IP, for example `http://192.168.x.x:8080`.",
-        )
-        TipChip(
-            title = "Emulator",
-            text = "Use `http://10.0.2.2:8080` instead of localhost.",
-        )
-    }
-}
-
-@Composable
-private fun TipChip(title: String, text: String) {
-    Surface(
-        color = PipePalette.PanelRaised,
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, PipePalette.Outline.copy(alpha = 0.8f)),
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(title, color = PipePalette.TextPrimary, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(text, color = PipePalette.TextSecondary, style = MaterialTheme.typography.bodySmall)
-        }
-    }
-}
-
-@Composable
-private fun PipePanel(
-    modifier: Modifier = Modifier,
-    accent: Boolean = false,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Surface(
-        modifier = modifier,
-        color = if (accent) PipePalette.PanelRaised else PipePalette.Panel,
-        shape = PipePanelShape,
-        border = BorderStroke(
-            1.dp,
-            if (accent) PipePalette.OutlineBright.copy(alpha = 0.85f) else PipePalette.Outline.copy(alpha = 0.8f),
-        ),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            content = content,
-        )
-    }
-}
-
-@Composable
-private fun SmallActionButton(
-    text: String,
-    onClick: () -> Unit,
-    accent: Boolean,
-) {
-    TextButton(
-        onClick = onClick,
-        colors = ButtonDefaults.textButtonColors(
-            contentColor = if (accent) PipePalette.TextPrimary else PipePalette.TextSecondary,
-            containerColor = if (accent) PipePalette.AccentBlue.copy(alpha = 0.22f) else PipePalette.PanelRaised,
-        ),
-        shape = RoundedCornerShape(16.dp),
-    ) {
-        Text(text)
-    }
-}
-
-@Composable
-private fun QuickActionButton(
-    text: String,
-    modifier: Modifier = Modifier,
-    enabled: Boolean,
-    accent: Boolean,
-    onClick: () -> Unit,
-) {
-    Button(
-        onClick = onClick,
-        modifier = modifier.defaultMinSize(minHeight = 48.dp),
-        enabled = enabled,
-        colors = if (accent) {
-            primaryButtonColors()
-        } else {
-            ButtonDefaults.buttonColors(
-                containerColor = PipePalette.PanelSoft,
-                contentColor = PipePalette.TextPrimary,
-                disabledContainerColor = PipePalette.PanelSoft.copy(alpha = 0.55f),
-                disabledContentColor = PipePalette.TextMuted,
-            )
-        },
-        shape = RoundedCornerShape(18.dp),
-    ) {
-        Text(text)
-    }
-}
-
-@Composable
-private fun SmallTextPill(
-    text: String,
-    onClick: () -> Unit,
-    destructive: Boolean = false,
-) {
-    TextButton(
-        onClick = onClick,
-        colors = ButtonDefaults.textButtonColors(
-            contentColor = if (destructive) PipePalette.Danger else PipePalette.TextPrimary,
-            containerColor = if (destructive) PipePalette.SoftDanger else PipePalette.PanelSoft,
-        ),
-        shape = RoundedCornerShape(16.dp),
-    ) {
-        Text(text)
-    }
-}
-
-@Composable
-private fun PipeChip(
-    text: String,
-    background: Color,
-    color: Color,
-) {
+private fun Badge(text: String, background: Color, textColor: Color = PipeColors.AccentInk) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
             .background(background)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+            .padding(horizontal = PipeSpace.sm, vertical = PipeSpace.xs),
     ) {
         Text(
             text = text,
-            color = color,
+            color = textColor,
             style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.SemiBold,
+            fontWeight = FontWeight.Bold,
         )
     }
 }
-
-@Composable
-private fun Badge(
-    text: String,
-    background: Color,
-    color: Color,
-) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(background)
-            .padding(horizontal = 9.dp, vertical = 5.dp),
-    ) {
-        Text(
-            text = text,
-            color = color,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
-}
-
-@Composable
-private fun ErrorBanner(message: String) {
-    Surface(
-        color = PipePalette.SoftDanger,
-        shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.dp, PipePalette.Danger.copy(alpha = 0.5f)),
-    ) {
-        Text(
-            text = message,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            color = PipePalette.Danger,
-            style = MaterialTheme.typography.bodySmall,
-        )
-    }
-}
-
-@Composable
-private fun primaryButtonColors() = ButtonDefaults.buttonColors(
-    containerColor = PipePalette.AccentBlue,
-    contentColor = PipePalette.TextPrimary,
-    disabledContainerColor = PipePalette.PanelSoft.copy(alpha = 0.55f),
-    disabledContentColor = PipePalette.TextMuted,
-)
 
 @Composable
 private fun pipeTextFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedTextColor = PipePalette.TextPrimary,
-    unfocusedTextColor = PipePalette.TextPrimary,
-    disabledTextColor = PipePalette.TextMuted,
-    focusedLabelColor = PipePalette.AccentCyan,
-    unfocusedLabelColor = PipePalette.TextSecondary,
-    focusedPlaceholderColor = PipePalette.TextMuted,
-    unfocusedPlaceholderColor = PipePalette.TextMuted,
-    focusedBorderColor = PipePalette.AccentBlue,
-    unfocusedBorderColor = PipePalette.OutlineBright,
-    cursorColor = PipePalette.AccentCyan,
-    focusedContainerColor = PipePalette.PanelSoft.copy(alpha = 0.55f),
-    unfocusedContainerColor = PipePalette.PanelSoft.copy(alpha = 0.4f),
+    focusedTextColor = PipeColors.Text,
+    unfocusedTextColor = PipeColors.TextSecondary,
+    disabledTextColor = PipeColors.TextDim,
+    focusedLabelColor = PipeColors.Accent,
+    unfocusedLabelColor = PipeColors.TextMuted,
+    focusedPlaceholderColor = PipeColors.TextDim,
+    unfocusedPlaceholderColor = PipeColors.TextDim,
+    focusedBorderColor = PipeColors.Accent,
+    unfocusedBorderColor = PipeColors.Border,
+    cursorColor = PipeColors.Accent,
+    focusedContainerColor = Color.Transparent,
+    unfocusedContainerColor = Color.Transparent,
 )
-
-private fun screenBackgroundBrush(): Brush = Brush.verticalGradient(
-    listOf(
-        PipePalette.Background,
-        PipePalette.BackgroundElevated,
-        PipePalette.Panel,
-    ),
-)
-
-private fun roleLabel(role: String): String = when (role.lowercase()) {
-    "owner" -> "Owner"
-    "admin" -> "Admin"
-    "user" -> "Member"
-    else -> role.ifBlank { "Member" }
-}
-
-private fun shortEndpoint(endpoint: String): String {
-    if (endpoint.length <= 34) return endpoint
-    return endpoint.take(34) + "..."
-}
