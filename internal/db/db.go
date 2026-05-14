@@ -128,7 +128,7 @@ type MobileSession struct {
 }
 
 func InitDB(filepath string) (*DB, error) {
-	sqlDB, err := sql.Open("sqlite3", filepath+"?_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=on")
+	sqlDB, err := sql.Open("sqlite3", filepath+"?_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=on&_loc=auto")
 	if err != nil {
 		return nil, err
 	}
@@ -527,6 +527,63 @@ func normalizePubKey(pubKey string) string {
 	return strings.TrimSpace(pubKey)
 }
 
+type userScanner interface {
+	Scan(dest ...any) error
+}
+
+var sqliteTimeFormats = []string{
+	"2006-01-02 15:04:05.999999999-07:00",
+	"2006-01-02 15:04:05.999999999Z07:00",
+	"2006-01-02T15:04:05.999999999-07:00",
+	"2006-01-02T15:04:05.999999999Z07:00",
+	"2006-01-02 15:04:05.999999999",
+	"2006-01-02 15:04:05",
+	time.RFC3339Nano,
+	time.RFC3339,
+}
+
+func parseSQLiteTime(value any) (time.Time, error) {
+	switch v := value.(type) {
+	case time.Time:
+		return v, nil
+	case string:
+		for _, layout := range sqliteTimeFormats {
+			if parsed, err := time.Parse(layout, v); err == nil {
+				return parsed, nil
+			}
+		}
+		return time.Time{}, fmt.Errorf("unsupported sqlite time format %q", v)
+	case []byte:
+		return parseSQLiteTime(string(v))
+	default:
+		return time.Time{}, fmt.Errorf("unsupported sqlite time type %T", value)
+	}
+}
+
+func scanUser(scanner userScanner) (*User, error) {
+	var (
+		user       User
+		createdAt  any
+		lastSeenAt any
+	)
+
+	if err := scanner.Scan(&user.ID, &user.SSHPubKey, &user.Username, &user.IsVerified, &createdAt, &user.Role, &user.Color, &user.IsBanned, &user.Bio, &lastSeenAt); err != nil {
+		return nil, err
+	}
+
+	var err error
+	user.CreatedAt, err = parseSQLiteTime(createdAt)
+	if err != nil {
+		return nil, err
+	}
+	user.LastSeenAt, err = parseSQLiteTime(lastSeenAt)
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
+
 func (db *DB) GetUserByPubKey(pubKey string) (*User, error) {
 	pubKey = normalizePubKey(pubKey)
 	row := db.QueryRow(`
@@ -535,11 +592,7 @@ func (db *DB) GetUserByPubKey(pubKey string) (*User, error) {
 		WHERE TRIM(ssh_pub_key) = ?
 	`, pubKey)
 
-	var u User
-	if err := row.Scan(&u.ID, &u.SSHPubKey, &u.Username, &u.IsVerified, &u.CreatedAt, &u.Role, &u.Color, &u.IsBanned, &u.Bio, &u.LastSeenAt); err != nil {
-		return nil, err
-	}
-	return &u, nil
+	return scanUser(row)
 }
 
 func (db *DB) GetUserByUsername(username string) (*User, error) {
@@ -549,11 +602,7 @@ func (db *DB) GetUserByUsername(username string) (*User, error) {
 		WHERE username_normalized = ?
 	`, normalizeUsername(username))
 
-	var u User
-	if err := row.Scan(&u.ID, &u.SSHPubKey, &u.Username, &u.IsVerified, &u.CreatedAt, &u.Role, &u.Color, &u.IsBanned, &u.Bio, &u.LastSeenAt); err != nil {
-		return nil, err
-	}
-	return &u, nil
+	return scanUser(row)
 }
 
 func (db *DB) GetUserByID(userID string) (*User, error) {
@@ -563,11 +612,7 @@ func (db *DB) GetUserByID(userID string) (*User, error) {
 		WHERE id = ?
 	`, userID)
 
-	var u User
-	if err := row.Scan(&u.ID, &u.SSHPubKey, &u.Username, &u.IsVerified, &u.CreatedAt, &u.Role, &u.Color, &u.IsBanned, &u.Bio, &u.LastSeenAt); err != nil {
-		return nil, err
-	}
-	return &u, nil
+	return scanUser(row)
 }
 
 func (db *DB) CreateUser(pubKey string) *User {
@@ -603,6 +648,9 @@ func (db *DB) CreateUser(pubKey string) *User {
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`, user.ID, user.SSHPubKey, user.Username, normalizeUsername(user.Username), user.IsVerified, user.CreatedAt, user.Role, user.Color, user.IsBanned, user.Bio, user.LastSeenAt)
 		if err == nil {
+			if joinErr := db.EnsurePublicChannelMemberships(user.ID); joinErr != nil {
+				log.Printf("error joining public channels for %q: %v", user.Username, joinErr)
+			}
 			return user
 		}
 
@@ -638,6 +686,74 @@ func (db *DB) CreateUser(pubKey string) *User {
 	}
 	log.Printf("error creating user: exhausted username retries for %q", pubKey)
 	return user
+}
+
+func (db *DB) EnsurePublicChannelMemberships(userID string) error {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil
+	}
+
+	_, err := db.Exec(`
+		INSERT OR IGNORE INTO channel_members (channel_id, user_id, created_at)
+		SELECT id, ?, ?
+		FROM channels
+		WHERE is_private = 0 AND COALESCE(kind, 'channel') != 'dm'
+	`, userID, time.Now())
+	return err
+}
+
+func (db *DB) CreateMobileUser(username string) (*User, error) {
+	username = sanitizeSingleLine(username, maxUsernameLen)
+	if !usernameRegexp.MatchString(username) {
+		return nil, ErrInvalidUsername
+	}
+
+	if existing, err := db.GetUserByUsername(username); err == nil {
+		return existing, nil
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count); err != nil {
+		return nil, err
+	}
+
+	role := "user"
+	if count == 0 {
+		role = "owner"
+	}
+
+	user := &User{
+		ID:         uuid.New().String(),
+		SSHPubKey:  fmt.Sprintf("mobile:%s:%s", normalizeUsername(username), uuid.NewString()),
+		Username:   username,
+		IsVerified: false,
+		CreatedAt:  time.Now(),
+		Role:       role,
+		Color:      defaultUserColor,
+		IsBanned:   false,
+		Bio:        "",
+		LastSeenAt: time.Now(),
+	}
+
+	_, err := db.Exec(`
+		INSERT INTO users (id, ssh_pub_key, username, username_normalized, is_verified, created_at, role, color, is_banned, bio, last_seen_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, user.ID, user.SSHPubKey, user.Username, normalizeUsername(user.Username), user.IsVerified, user.CreatedAt, user.Role, user.Color, user.IsBanned, user.Bio, user.LastSeenAt)
+	if err == nil {
+		if err := db.EnsurePublicChannelMemberships(user.ID); err != nil {
+			return nil, err
+		}
+		return user, nil
+	}
+
+	if strings.Contains(strings.ToLower(err.Error()), "username") {
+		return db.GetUserByUsername(username)
+	}
+
+	return nil, err
 }
 
 func (db *DB) SetVerified(userID string) error {
@@ -703,12 +819,12 @@ func (db *DB) GetUsers() []User {
 
 	var users []User
 	for rows.Next() {
-		var user User
-		if err := rows.Scan(&user.ID, &user.SSHPubKey, &user.Username, &user.IsVerified, &user.CreatedAt, &user.Role, &user.Color, &user.IsBanned, &user.Bio, &user.LastSeenAt); err != nil {
+		user, err := scanUser(rows)
+		if err != nil {
 			log.Printf("error scanning user: %v", err)
 			return nil
 		}
-		users = append(users, user)
+		users = append(users, *user)
 	}
 	return users
 }
@@ -739,12 +855,12 @@ func (db *DB) GetUserByMobileToken(token string) (*User, error) {
 		WHERE ms.token = ?
 	`, strings.TrimSpace(token))
 
-	var user User
-	if err := row.Scan(&user.ID, &user.SSHPubKey, &user.Username, &user.IsVerified, &user.CreatedAt, &user.Role, &user.Color, &user.IsBanned, &user.Bio, &user.LastSeenAt); err != nil {
+	user, err := scanUser(row)
+	if err != nil {
 		return nil, err
 	}
 	_, _ = db.Exec("UPDATE mobile_sessions SET last_used_at = ? WHERE token = ?", time.Now(), strings.TrimSpace(token))
-	return &user, nil
+	return user, nil
 }
 
 var ErrMobilePinNotSet = errors.New("mobile PIN not set — run /setpin in the SSH client first")
@@ -1019,12 +1135,12 @@ func (db *DB) GetChannelMembers(channelID string) []User {
 
 	var members []User
 	for rows.Next() {
-		var user User
-		if err := rows.Scan(&user.ID, &user.SSHPubKey, &user.Username, &user.IsVerified, &user.CreatedAt, &user.Role, &user.Color, &user.IsBanned, &user.Bio, &user.LastSeenAt); err != nil {
+		user, err := scanUser(rows)
+		if err != nil {
 			log.Printf("error scanning channel member: %v", err)
 			return nil
 		}
-		members = append(members, user)
+		members = append(members, *user)
 	}
 	return members
 }
@@ -1252,22 +1368,6 @@ func scanMessages(rows *sql.Rows) []Message {
 		messages = append(messages, message)
 	}
 	return messages
-}
-
-func parseSQLiteTime(value string) (time.Time, error) {
-	layouts := []string{
-		time.RFC3339Nano,
-		time.RFC3339,
-		"2006-01-02 15:04:05.999999999-07:00",
-		"2006-01-02 15:04:05.999999999",
-		"2006-01-02 15:04:05",
-	}
-	for _, layout := range layouts {
-		if parsed, err := time.Parse(layout, value); err == nil {
-			return parsed, nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("unsupported sqlite time %q", value)
 }
 
 func (db *DB) GetMessageByID(channelID, messageID string) (*Message, error) {

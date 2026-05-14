@@ -113,6 +113,94 @@ func TestCreateMessageSanitizesReplyMetadata(t *testing.T) {
 	}
 }
 
+func TestCreateMobileUserCreatesAndReusesUsername(t *testing.T) {
+	t.Parallel()
+
+	database, err := InitDB(filepath.Join(t.TempDir(), "clinet.db"))
+	if err != nil {
+		t.Fatalf("InitDB() error = %v", err)
+	}
+	defer database.Close()
+
+	user, err := database.CreateMobileUser("inko_mobile")
+	if err != nil {
+		t.Fatalf("CreateMobileUser() error = %v", err)
+	}
+	if user.Username != "inko_mobile" {
+		t.Fatalf("username = %q, want %q", user.Username, "inko_mobile")
+	}
+	if user.SSHPubKey == "" || user.SSHPubKey[:7] != "mobile:" {
+		t.Fatalf("ssh pub key = %q, want mobile sentinel", user.SSHPubKey)
+	}
+	for _, publicChannel := range []string{"#general", "#linux", "#bash-magic"} {
+		channel, err := database.GetChannelByName(publicChannel)
+		if err != nil {
+			t.Fatalf("GetChannelByName(%q) error = %v", publicChannel, err)
+		}
+
+		found := false
+		for _, member := range database.GetChannelMembers(channel.ID) {
+			if member.ID == user.ID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("mobile user %q should be joined to public channel %q", user.Username, publicChannel)
+		}
+	}
+
+	same, err := database.CreateMobileUser("inko_mobile")
+	if err != nil {
+		t.Fatalf("CreateMobileUser(existing) error = %v", err)
+	}
+	if same.ID != user.ID {
+		t.Fatalf("existing user ID = %q, want %q", same.ID, user.ID)
+	}
+
+	_, err = database.CreateMobileUser("x")
+	if !errors.Is(err, ErrInvalidUsername) {
+		t.Fatalf("CreateMobileUser(invalid) error = %v, want %v", err, ErrInvalidUsername)
+	}
+}
+
+func TestEnsurePublicChannelMembershipsBackfillsExistingUser(t *testing.T) {
+	t.Parallel()
+
+	database, err := InitDB(filepath.Join(t.TempDir(), "clinet.db"))
+	if err != nil {
+		t.Fatalf("InitDB() error = %v", err)
+	}
+	defer database.Close()
+
+	user := database.CreateUser("backfill-pubkey")
+	if _, err := database.Exec("DELETE FROM channel_members WHERE user_id = ?", user.ID); err != nil {
+		t.Fatalf("DELETE channel_members error = %v", err)
+	}
+
+	if err := database.EnsurePublicChannelMemberships(user.ID); err != nil {
+		t.Fatalf("EnsurePublicChannelMemberships() error = %v", err)
+	}
+
+	for _, publicChannel := range []string{"#general", "#linux", "#bash-magic"} {
+		channel, err := database.GetChannelByName(publicChannel)
+		if err != nil {
+			t.Fatalf("GetChannelByName(%q) error = %v", publicChannel, err)
+		}
+
+		found := false
+		for _, member := range database.GetChannelMembers(channel.ID) {
+			if member.ID == user.ID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("user %q should be backfilled into public channel %q", user.Username, publicChannel)
+		}
+	}
+}
+
 func TestGetOrCreateDirectChannelReturnsStableChannel(t *testing.T) {
 	t.Parallel()
 
